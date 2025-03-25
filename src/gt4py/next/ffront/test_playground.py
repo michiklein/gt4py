@@ -8,6 +8,7 @@ from gt4py.next.iterator.transforms import (
     inline_lambdas,
     collapse_list_get,
     pass_manager,
+    collapse_tables,
 )
 from gt4py.next.common import NeighborConnectivityType
 from gt4py._core import definitions as core_defs
@@ -31,13 +32,17 @@ def shift_twice_concrete(
 
 ir = shift_twice_concrete.__gt_gtir__()
 print(ir)
+print(repr(ir))
 ir = fuse_as_fieldop.FuseAsFieldOp.apply(ir, offset_provider_type={})
 print(ir)
-# print(repr(ir))
+print(repr(ir))
 ir = normalize_shifts.NormalizeShifts().visit(ir)
 print(ir)
 print(repr(ir))
-
+ir = collapse_tables.CollapseTables().visit(ir)
+print(ir)
+print(repr(ir))
+exit(1)
 
 @gtx.field_operator
 def shift_twice(

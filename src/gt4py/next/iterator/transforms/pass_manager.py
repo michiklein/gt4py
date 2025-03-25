@@ -31,6 +31,7 @@ from gt4py.next.iterator.transforms.merge_let import MergeLet
 from gt4py.next.iterator.transforms.normalize_shifts import NormalizeShifts
 from gt4py.next.iterator.transforms.unroll_reduce import UnrollReduce
 from gt4py.next.iterator.type_system.inference import infer
+from gt4py.next.iterator.transforms.collapse_tables import CollapseTables
 
 
 class GTIRTransform(Protocol):
