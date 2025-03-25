@@ -37,7 +37,6 @@ print(ir)
 ir = normalize_shifts.NormalizeShifts().visit(ir)
 print(ir)
 print(repr(ir))
-exit(1)
 
 
 @gtx.field_operator
