@@ -330,7 +330,7 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
         ):
             flat_args = node.fun.args
 
-            if len(flat_args) % 2 != 0:
+            if len(flat_args) % 2 != 0: #prevent something freaky from happening
                 return node
 
             key_parts = []

@@ -28,7 +28,7 @@ def shift_twice_concrete(
     inp: gtx.Field[gtx.Dims[Vertex], gtx.float64],
 ) -> gtx.Field[gtx.Dims[Vertex], gtx.float64]:
     foo = inp(E2V[1])
-    return foo(V2E[3])
+    return foo(V2E[2])
 
 
 ir = shift_twice_concrete.__gt_gtir__()
