@@ -320,7 +320,68 @@ lookup_v = {
 class CollapseTables(PreserveLocationVisitor, NodeTranslator):
     def visit_FunCall(self, node: ir.FunCall):
         node = self.generic_visit(node)
-        if isinstance(node.fun, ir.FunCall):
-            return ir.FunCall(
-                fun=ir.SymRef(value="C2E2V"),
-            )
+
+        if ( #check if we have a shift
+            isinstance(node.fun, ir.FunCall)
+            and isinstance(node.fun.fun, ir.SymRef)
+            and node.fun.fun.id == "shift"
+            and node.fun.args
+            and node.args
+        ):
+            flat_args = node.fun.args
+
+            if len(flat_args) % 2 != 0:
+                return node
+
+            key_parts = []
+            for i in range(0, len(flat_args), 2):
+                symbol_arg = flat_args[i]
+                offset_arg = flat_args[i + 1]
+
+                if (
+                    isinstance(symbol_arg, ir.OffsetLiteral)
+                    and isinstance(symbol_arg.value, ir.SymbolRef)
+                    and isinstance(offset_arg, ir.OffsetLiteral)
+                    and isinstance(offset_arg.value, int)
+                ):
+                    part = f"{symbol_arg.value}[{offset_arg.value}]" #translate into form that we have in the lookup tables
+                    key_parts.append(part)
+                else:
+                    return node #not the type of shift we are looking for
+
+            key = "".join(key_parts)
+
+            if True: #TODO
+                lookup_e = lookup_e_se
+            elif False:
+                lookup_e = lookup_e_e
+            else:
+                lookup_e = lookup_e_n
+
+            if True: #TODO
+                lookup_c = lookup_c_u
+            else:
+                lookup_c = lookup_c_d
+
+            for table in [lookup_v, lookup_c, lookup_e]: #find our replacement
+                if key in table:
+                    replacement = table[key]
+                    if replacement == "self":
+                        return node.args[0]
+                    else:
+                        sym_name, index_str = replacement.split("[") #fix my stupid format
+                        index = int(index_str.rstrip("]"))
+                        return ir.FunCall(
+                            fun=ir.FunCall(
+                                fun=ir.SymRef(id="shift"),
+                                args=[
+                                    ir.OffsetLiteral(value=ir.SymbolRef(sym_name)),
+                                    ir.OffsetLiteral(value=index),
+                                ],
+                            ),
+                            args=node.args,
+                        )
+
+        return node
+
+

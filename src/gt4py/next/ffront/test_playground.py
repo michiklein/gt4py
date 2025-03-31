@@ -20,14 +20,15 @@ C2EDim = gtx.Dimension("C2E", kind=gtx.DimensionKind.LOCAL)
 E2VDim = gtx.Dimension("E2V", kind=gtx.DimensionKind.LOCAL)
 E2V = gtx.FieldOffset("E2V", source=Vertex, target=(Edge, E2VDim))
 C2E = gtx.FieldOffset("C2E", source=Edge, target=(Cell, C2EDim))
+V2E = gtx.FieldOffset("V2E", source=Edge, target=(Vertex, E2VDim))
 
 
 @gtx.field_operator
 def shift_twice_concrete(
     inp: gtx.Field[gtx.Dims[Vertex], gtx.float64],
-) -> gtx.Field[gtx.Dims[Cell], gtx.float64]:
-    foo = inp(E2V[0])
-    return foo(C2E[0])
+) -> gtx.Field[gtx.Dims[Vertex], gtx.float64]:
+    foo = inp(E2V[1])
+    return foo(V2E[3])
 
 
 ir = shift_twice_concrete.__gt_gtir__()
