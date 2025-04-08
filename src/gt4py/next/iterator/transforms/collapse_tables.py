@@ -314,8 +314,32 @@ lookup_v = {
     "V2C[5]C2E[0]": "V2C2E[1]",
     "V2C[5]C2E[1]": "V2C2E[11]",
     "V2C[5]C2E[2]": "V2C2E[5]",
+    #V2E2C2V
+    "V2E[0]E2C2V[0]": "V2E2C2V[0]",
+    "V2E[0]E2C2V[1]": "self",
+    "V2E[0]E2C2V[2]": "V2E2C2V[1]",
+    "V2E[0]E2C2V[3]": "V2E2C2V[2]",
+    "V2E[1]E2C2V[0]": "V2E2C2V[1]",
+    "V2E[1]E2C2V[1]": "self",
+    "V2E[1]E2C2V[2]": "V2E2C2V[3]",
+    "V2E[1]E2C2V[3]": "V2E2C2V[0]",
+    "V2E[2]E2C2V[0]": "self",
+    "V2E[2]E2C2V[1]": "V2E2C2V[3]",
+    "V2E[2]E2C2V[2]": "V2E2C2V[4]",
+    "V2E[2]E2C2V[3]": "V2E2C2V[1]",
+    "V2E[3]E2C2V[0]": "self",
+    "V2E[3]E2C2V[1]": "V2E2C2V[4]",
+    "V2E[3]E2C2V[2]": "V2E2C2V[3]",
+    "V2E[3]E2C2V[3]": "V2E2C2V[5]",
+    "V2E[4]E2C2V[0]": "self",
+    "V2E[4]E2C2V[1]": "V2E2C2V[5]",
+    "V2E[4]E2C2V[2]": "V2E2C2V[4]",
+    "V2E[4]E2C2V[3]": "V2E2C2V[2]",
+    "V2E[5]E2C2V[0]": "V2E2C2V[2]",
+    "V2E[5]E2C2V[1]": "self",
+    "V2E[5]E2C2V[2]": "V2E2C2V[5]",
+    "V2E[5]E2C2V[3]": "V2E2C2V[0]",
 }
-
 
 class CollapseTables(PreserveLocationVisitor, NodeTranslator):
     def visit_FunCall(self, node: ir.FunCall):
