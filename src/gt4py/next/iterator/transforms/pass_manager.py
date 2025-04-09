@@ -188,6 +188,8 @@ def apply_common_transforms(
     ir = InlineLambdas.apply(
         ir, opcount_preserving=True, force_inline_lambda_args=force_inline_lambda_args
     )
+    
+    ir = CollapseTables().visit(ir)
 
     assert isinstance(ir, itir.Program)
     return ir
