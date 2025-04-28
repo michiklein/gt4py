@@ -1,14 +1,19 @@
-# GT4Py - GridTools Framework
-#
-# Copyright (c) 2014-2024, ETH Zurich
-# All rights reserved.
-#
-# Please, refer to the LICENSE file in the root directory.
-# SPDX-License-Identifier: BSD-3-Clause
-
-
 from gt4py.eve import NodeTranslator, PreserveLocationVisitor
 from gt4py.next.iterator import ir
+from gt4py.next.ffront.experimental import concat_where
+from gt4py.next import Dimension
+
+dims = type(
+    "dims",
+    (),
+    {
+        "EdgeDim": Dimension("Edge"),
+        "CellDim": Dimension("Cell"),
+        "NumEdges": Dimension("NumEdges"),
+        "NumCells": Dimension("NumCells"),
+    },
+)
+
 
 lookup_e_se = {
     # E2C2E
@@ -314,7 +319,7 @@ lookup_v = {
     "V2C[5]C2E[0]": "V2C2E[1]",
     "V2C[5]C2E[1]": "V2C2E[11]",
     "V2C[5]C2E[2]": "V2C2E[5]",
-    #V2E2C2V
+    # V2E2C2V
     "V2E[0]E2C2V[0]": "V2E2C2V[0]",
     "V2E[0]E2C2V[1]": "self",
     "V2E[0]E2C2V[2]": "V2E2C2V[1]",
@@ -342,10 +347,14 @@ lookup_v = {
 }
 
 class CollapseTables(PreserveLocationVisitor, NodeTranslator):
+    def __init__(self, dimsizes):
+        super().__init__()
+        self.dimsizes = dimsizes
+
     def visit_FunCall(self, node: ir.FunCall):
         node = self.generic_visit(node)
 
-        if ( #check if we have a shift
+        if (
             isinstance(node.fun, ir.FunCall)
             and isinstance(node.fun.fun, ir.SymRef)
             and node.fun.fun.id == "shift"
@@ -353,8 +362,7 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
             and node.args
         ):
             flat_args = node.fun.args
-
-            if len(flat_args) % 2 != 0: #prevent something freaky from happening
+            if len(flat_args) % 2 != 0:
                 return node
 
             key_parts = []
@@ -368,32 +376,36 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
                     and isinstance(offset_arg, ir.OffsetLiteral)
                     and isinstance(offset_arg.value, int)
                 ):
-                    part = f"{symbol_arg.value}[{offset_arg.value}]" #translate into form that we have in the lookup tables
+                    part = f"{symbol_arg.value}[{offset_arg.value}]"
                     key_parts.append(part)
                 else:
-                    return node #not the type of shift we are looking for
+                    return node
 
             key = "".join(key_parts)
 
-            if True: #TODO
-                lookup_e = lookup_e_se
-            elif False:
-                lookup_e = lookup_e_e
-            else:
-                lookup_e = lookup_e_n
+            lookup_e = concat_where(
+                Dimension("Edge") < (self.dimsizes[Dimension("NumEdges")] // 3),
+                lookup_e_se,
+                concat_where(
+                    Dimension("Edge") < (2 * self.dimsizes[Dimension("NumEdges")] // 3),
+                    lookup_e_n,
+                    lookup_e_e,
+                ),
+            )
 
-            if True: #TODO
-                lookup_c = lookup_c_u
-            else:
-                lookup_c = lookup_c_d
+            lookup_c = concat_where(
+                Dimension("Cell") < (self.dimsizes[Dimension("NumCells")] // 2),
+                lookup_c_u,
+                lookup_c_d,
+            )
 
-            for table in [lookup_v, lookup_c, lookup_e]: #find our replacement
+            for table in [lookup_v, lookup_c, lookup_e]:
                 if key in table:
                     replacement = table[key]
                     if replacement == "self":
                         return node.args[0]
                     else:
-                        sym_name, index_str = replacement.split("[") #fix my stupid format
+                        sym_name, index_str = replacement.split("[")
                         index = int(index_str.rstrip("]"))
                         return ir.FunCall(
                             fun=ir.FunCall(
@@ -407,5 +419,3 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
                         )
 
         return node
-
-
