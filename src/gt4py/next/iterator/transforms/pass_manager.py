@@ -217,4 +217,5 @@ def apply_fieldview_transforms(
 
     ir = infer_domain.infer_program(ir, offset_provider=offset_provider)
     ir = prune_broadcast.PruneBroadcast.apply(ir)
+    ir = CollapseTables().visit(ir)
     return ir
