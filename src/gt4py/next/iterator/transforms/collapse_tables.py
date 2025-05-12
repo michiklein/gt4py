@@ -3,18 +3,7 @@ from gt4py.eve import NodeTranslator, PreserveLocationVisitor
 from gt4py.next.iterator import ir
 from gt4py.next.ffront.experimental import concat_where
 from gt4py.next import Dimension
-
-dims = type(
-    "dims",
-    (),
-    {
-        "EdgeDim": Dimension("Edge"),
-        "CellDim": Dimension("Cell"),
-        "NumEdges": Dimension("NumEdges"),
-        "NumCells": Dimension("NumCells"),
-    },
-)
-
+from gt4py.next.iterator.ir_utils import ir_makers as im
 
 lookup_e_se = {
     # E2C2E
@@ -348,9 +337,6 @@ lookup_v = {
 }
 
 class CollapseTables(PreserveLocationVisitor, NodeTranslator):
-    def __init__(self, dimsizes):
-        super().__init__()
-        self.dimsizes = dimsizes
 
     def visit_FunCall(self, node: ir.FunCall):
         node = self.generic_visit(node)
@@ -384,21 +370,30 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
 
             key = "".join(key_parts)
 
-            lookup_e = concat_where(
-                Dimension("Edge") < (self.dimsizes[Dimension("NumEdges")] // 3),
-                lookup_e_se,
-                concat_where(
-                    Dimension("Edge") < (2 * self.dimsizes[Dimension("NumEdges")] // 3),
-                    lookup_e_n,
-                    lookup_e_e,
-                ),
-            )
+            # if Dimension("Edge") < (im.divides_(im.ref("num_edges"), 3)):
+            #     lookup_e = lookup_e_se
+            # elif Dimension("Edge") < (2 * im.divides_(im.ref("num_edges"), 3)):
+            #     lookup_e = lookup_e_n
+            # else:
+            #     lookup_e = lookup_e_e
 
-            lookup_c = concat_where(
-                Dimension("Cell") < (self.dimsizes[Dimension("NumCells")] // 2),
-                lookup_c_u,
-                lookup_c_d,
-            )
+            # if Dimension("Cell") < (im.divides_(im.ref("num_cells"), 2)):
+            #     lookup_c = lookup_c_u
+            # else:
+            #     lookup_c = lookup_c_d
+                
+
+            if Dimension("Edge") < (9216 // 3):
+                lookup_e = lookup_e_se
+            elif Dimension("Edge") < (2 * 9216 // 3):
+                lookup_e = lookup_e_n
+            else:
+                lookup_e = lookup_e_e
+
+            if Dimension("Cell") < (9216 // 2):
+                lookup_c = lookup_c_u
+            else:
+                lookup_c = lookup_c_d
 
             for table in [lookup_v, lookup_c, lookup_e]:
                 if key in table:

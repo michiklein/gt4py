@@ -36,7 +36,7 @@ from gt4py.next.iterator.transforms.normalize_shifts import NormalizeShifts
 from gt4py.next.iterator.transforms.unroll_reduce import UnrollReduce
 from gt4py.next.iterator.type_system.inference import infer
 from gt4py.next.iterator.transforms.collapse_tables import CollapseTables
-
+import pdb
 
 class GTIRTransform(Protocol):
     def __call__(
@@ -186,11 +186,10 @@ def apply_common_transforms(
             raise RuntimeError("Reduction unrolling failed.")
 
     ir = InlineLambdas.apply(
-        ir, opcount_preserving=True, force_inline_lambda_args=force_inline_lambda_args
+        ir, opcount_preserving=False, force_inline_lambda_args=force_inline_lambda_args
     )
-    
+    ir = NormalizeShifts().visit(ir)
     ir = CollapseTables().visit(ir)
-
     assert isinstance(ir, itir.Program)
     return ir
 

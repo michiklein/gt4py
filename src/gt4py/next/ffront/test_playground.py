@@ -27,7 +27,7 @@ V2E = gtx.FieldOffset("V2E", source=Edge, target=(Vertex, E2VDim))
 def shift_twice_concrete(
     inp: gtx.Field[gtx.Dims[Vertex], gtx.float64],
 ) -> gtx.Field[gtx.Dims[Vertex], gtx.float64]:
-    foo = inp(E2V[1])
+    foo = inp(E2V[0])
     return foo(V2E[2])
 
 
