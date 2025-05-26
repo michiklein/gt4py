@@ -95,8 +95,7 @@ class ListType(DataType):
     """
 
     element_type: DataType
-    # TODO(havogt): the `offset_type` is not yet used in type_inference,
-    # it is meant to describe the neighborhood (via the local dimension)
+    # TODO(tehrengruber): make `offset_type` mandatory
     offset_type: Optional[common.Dimension] = None
 
 
@@ -145,6 +144,4 @@ class FunctionType(TypeSpec, CallableType):
 
 
 class DomainType(DataType):
-    # TODO(tehrengruber): Remove "unknown" here again after the result type of `as_fieldop`
-    #  is always precisely known. This is the case after #1853.
-    dims: list[common.Dimension] | Literal["unknown"]
+    dims: list[common.Dimension]

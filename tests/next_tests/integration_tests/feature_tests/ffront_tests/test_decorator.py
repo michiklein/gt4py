@@ -36,7 +36,7 @@ def test_program_gtir_regression(cartesian_case):
 
 def test_frozen(cartesian_case):
     if cartesian_case.backend is None:
-        pytest.xfail("Frozen Program with embedded execution is not possible.")
+        pytest.skip("Frozen Program with embedded execution is not possible.")
 
     @gtx.field_operator
     def testee_op(a: cases.IField) -> cases.IField:

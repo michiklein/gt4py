@@ -23,8 +23,10 @@ from .gpu_utils import (
 from .local_double_buffering import gt_create_local_double_buffering
 from .loop_blocking import LoopBlocking
 from .map_fusion import MapFusion, MapFusionParallel, MapFusionSerial
+from .map_fusion_extended import gt_horizontal_map_fusion, gt_vertical_map_fusion
 from .map_orderer import MapIterationOrder, gt_set_iteration_order
 from .map_promoter import SerialMapPromoter
+from .move_dataflow_into_if_body import MoveDataflowIntoIfBody
 from .redundant_array_removers import (
     CopyChainRemover,
     MultiStateGlobalSelfCopyElimination,
@@ -42,7 +44,7 @@ from .simplify import (
     gt_simplify,
     gt_substitute_compiletime_symbols,
 )
-from .split_access_nodes import SplitAccessNode, gt_split_access_nodes
+from .split_access_nodes import SplitAccessNode, SplitMemlet, gt_split_access_nodes
 from .state_fusion import GT4PyStateFusion
 from .strides import (
     gt_change_transient_strides,
@@ -66,12 +68,14 @@ __all__ = [
     "MapFusionParallel",
     "MapFusionSerial",
     "MapIterationOrder",
+    "MoveDataflowIntoIfBody",
     "MultiStateGlobalSelfCopyElimination",
     "SerialMapPromoter",
     "SerialMapPromoterGPU",
     "SingleStateGlobalDirectSelfCopyElimination",
     "SingleStateGlobalSelfCopyElimination",
     "SplitAccessNode",
+    "SplitMemlet",
     "gt_auto_optimize",
     "gt_change_transient_strides",
     "gt_create_local_double_buffering",
@@ -79,6 +83,7 @@ __all__ = [
     "gt_find_constant_arguments",
     "gt_gpu_transform_non_standard_memlet",
     "gt_gpu_transformation",
+    "gt_horizontal_map_fusion",
     "gt_inline_nested_sdfg",
     "gt_make_transients_persistent",
     "gt_map_strides_to_dst_nested_sdfg",
@@ -93,4 +98,5 @@ __all__ = [
     "gt_simplify",
     "gt_split_access_nodes",
     "gt_substitute_compiletime_symbols",
+    "gt_vertical_map_fusion",
 ]
