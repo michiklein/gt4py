@@ -112,7 +112,7 @@ def _(arg: ts.ScalarType) -> ts.ScalarType:
 def synthesize_binary_math_comparison_builtins(
     lhs, rhs
 ) -> ts.ScalarType | ts.TupleType | ts.DomainType:
-    print(f"lhs: {type(lhs)}, rhs: {type(rhs)}")
+    # print(f"lhs: {type(lhs)}, rhs: {type(rhs)}")
     if isinstance(lhs, ts.ScalarType) and isinstance(rhs, ts.DimensionType):
         return ts.DomainType(dims=[rhs.dim])
     if isinstance(lhs, ts.DimensionType) and isinstance(rhs, ts.ScalarType):
@@ -139,6 +139,7 @@ def _(lhs, rhs) -> ts.ScalarType | ts.TupleType | ts.DomainType:
 def deref(it: it_ts.IteratorType | ts.DeferredType) -> ts.DataType | ts.DeferredType:
     if isinstance(it, ts.DeferredType):
         return ts.DeferredType(constraint=None)
+    # print(f"deref: {type(it)}")    
     assert isinstance(it, it_ts.IteratorType)
     assert _is_derefable_iterator_type(it)
     return it.element_type
