@@ -1,4 +1,4 @@
-name: "Fallback: Test Storage (CPU)"
+name: "Test Package Root"
 
 on:
   push:
@@ -7,14 +7,6 @@ on:
   pull_request:
     branches:
     - main
-    paths-ignore:  # Inverse of corresponding workflow
-    - "src/gt4py/storage/**"
-    - "src/gt4py/cartesian/backend/**"   # For DaCe storages
-    - "tests/storage_tests/**"
-    - ".github/workflows/**"
-    - "*.lock"
-    - "*.toml"
-    - "*.yml"
 
 jobs:
   # First job to read Python versions from .python-versions file
@@ -27,13 +19,26 @@ jobs:
     - id: get-versions
       uses: ./.github/actions/get-python-versions
 
-  test-storage:
+  # Test-running job
+  test-package:
     needs: get-python-versions
     strategy:
       matrix:
         os: ["ubuntu-latest"]
         python-version: ${{ fromJson(needs.get-python-versions.outputs.python-versions) }}
+      fail-fast: false
 
     runs-on: ${{ matrix.os }}
     steps:
-    - run: 'echo "No build required"'
+    - uses: actions/checkout@v4
+
+    - name: Install uv and set the python version
+      uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+        python-version: ${{ matrix.python-version }}
+
+    - name: Run 'package' tests with nox
+      shell: bash
+      run: uv run --script noxfile.py -s test_package-${{ matrix.python-version }}

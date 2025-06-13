@@ -12,7 +12,8 @@ from gt4py.eve import utils as eve_utils
 from gt4py.next import common
 from gt4py.next.iterator import ir as itir
 from gt4py.next.iterator.transforms import (
-    expand_library_functions,
+    concat_where,
+    dead_code_elimination,
     fuse_as_fieldop,
     global_tmps,
     infer_domain,
@@ -20,9 +21,7 @@ from gt4py.next.iterator.transforms import (
     inline_dynamic_shifts,
     inline_fundefs,
     inline_lifts,
-    nest_concat_wheres,
-    prune_broadcast,
-    transform_concat_where,
+    remove_broadcast,
 )
 from gt4py.next.iterator.transforms.collapse_list_get import CollapseListGet
 from gt4py.next.iterator.transforms.collapse_tuple import CollapseTuple
@@ -79,35 +78,24 @@ def apply_common_transforms(
     #  test_can_deref. We didn't notice previously as FieldOpFusion did this implicitly everywhere.
     ir = inline_lifts.InlineLifts().visit(ir)
 
-    # note: this increases the size of the tree
-    # Inline. The domain inference can not handle "user" functions, e.g. `let f = λ(...) → ... in f(...)`
-    ir = InlineLambdas.apply(ir, opcount_preserving=True, force_inline_lambda_args=True)
-    # required in order to get rid of expressions without a domain (e.g. when a tuple element is never accessed)
-    ir = CollapseTuple.apply(
-        ir,
-        enabled_transformations=~CollapseTuple.Transformation.PROPAGATE_TO_IF_ON_TUPLES,
-        uids=collapse_tuple_uids,
-        offset_provider_type=offset_provider_type,
-    )  # type: ignore[assignment]  # always an itir.Program
+    ir = dead_code_elimination.dead_code_elimination(
+        ir, collapse_tuple_uids=collapse_tuple_uids, offset_provider_type=offset_provider_type
+    )  # domain inference does not support dead-code
     ir = inline_dynamic_shifts.InlineDynamicShifts.apply(
         ir
     )  # domain inference does not support dynamic offsets yet
     ir = infer_domain_ops.InferDomainOps.apply(ir)
-    ir = nest_concat_wheres.NestConcatWheres.apply(ir)
+    ir = concat_where.simplify_domain_argument(ir)
 
+    ir = concat_where.expand_tuple_args(ir, offset_provider_type=offset_provider_type)  # type: ignore[assignment]  # always an itir.Program
     ir = infer_domain.infer_program(
         ir,
         offset_provider=offset_provider,
         symbolic_domain_sizes=symbolic_domain_sizes,
     )
-    ir = prune_broadcast.PruneBroadcast.apply(ir)
+    ir = remove_broadcast.RemoveBroadcast.apply(ir)
 
-    # Note: executing domain inference again afterwards will give wrong domains.
-    # This might be problematic in the temporary extraction, where we do this...
-    ir = ConstantFolding.apply(ir)  # TODO: remove
-    ir = transform_concat_where.TransformConcatWhere.apply(ir)
-    ir = ConstantFolding.apply(ir)  # TODO: remove
-    ir = expand_library_functions.ExpandLibraryFunctions.apply(ir)
+    ir = concat_where.transform_to_as_fieldop(ir)
 
     for _ in range(10):
         inlined = ir
@@ -198,22 +186,18 @@ def apply_common_transforms(
 def apply_fieldview_transforms(
     ir: itir.Program, *, offset_provider: common.OffsetProvider
 ) -> itir.Program:
+    offset_provider_type = common.offset_provider_to_type(offset_provider)
+
     ir = inline_fundefs.InlineFundefs().visit(ir)
     ir = inline_fundefs.prune_unreferenced_fundefs(ir)
-    ir = InlineLambdas.apply(ir, opcount_preserving=True, force_inline_lambda_args=True)
-    ir = CollapseTuple.apply(
-        ir,
-        enabled_transformations=~CollapseTuple.Transformation.PROPAGATE_TO_IF_ON_TUPLES,
-        offset_provider_type=common.offset_provider_to_type(offset_provider),
-    )  # type: ignore[assignment] # type is still `itir.Program`
+    ir = dead_code_elimination.dead_code_elimination(ir, offset_provider_type=offset_provider_type)
     ir = inline_dynamic_shifts.InlineDynamicShifts.apply(
         ir
     )  # domain inference does not support dynamic offsets yet
 
-    # TODO: deduplicate with regular pass manager
     ir = infer_domain_ops.InferDomainOps.apply(ir)
-    ir = nest_concat_wheres.NestConcatWheres.apply(ir)
-    ir = ConstantFolding.apply(ir)
+    ir = concat_where.simplify_domain_argument(ir)
+    ir = ConstantFolding.apply(ir)  # type: ignore[assignment]  # always an itir.Program
 
     ir = infer_domain.infer_program(ir, offset_provider=offset_provider)
     ir = prune_broadcast.PruneBroadcast.apply(ir)

@@ -981,7 +981,7 @@ def _concat_where(
     return _concat(*f_slices, *t_slices, dim=mask_dim)
 
 
-NdArrayField.register_builtin_func(experimental.concat_where, _concat_where)  # type: ignore[arg-type]
+NdArrayField.register_builtin_func(experimental.concat_where, _concat_where)  # type: ignore[arg-type] # TODO(havogt): this is still the "old" concat_where, needs to be replaced in a next PR
 
 
 def _make_reduction(
@@ -1001,7 +1001,7 @@ def _make_reduction(
                 "Reducing a field with more than one local dimension is not supported."
             )
         reduce_dim_index = field.domain.dims.index(axis)
-        current_offset_provider = embedded_context.offset_provider.get(None)
+        current_offset_provider = embedded_context.get_offset_provider(None)
         assert current_offset_provider is not None
         offset_definition = current_offset_provider[
             axis.value

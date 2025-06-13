@@ -429,7 +429,7 @@ class FieldOperatorTypeDeduction(traits.VisitorWithSymbolTableTrait, NodeTransla
         if not isinstance(new_node.condition.type, ts.ScalarType):
             raise errors.DSLError(
                 node.location,
-                "Condition for 'if' must be scalar, " f"got '{new_node.condition.type}' instead.",
+                f"Condition for 'if' must be scalar, got '{new_node.condition.type}' instead.",
             )
 
         if new_node.condition.type.kind != ts.ScalarKind.BOOL:
@@ -595,18 +595,21 @@ class FieldOperatorTypeDeduction(traits.VisitorWithSymbolTableTrait, NodeTransla
             kind=getattr(ts.ScalarKind, builtins.INTEGER_INDEX_BUILTIN.upper())
         )
 
+        def error_msg(left: ts.TypeSpec, right: ts.TypeSpec) -> str:
+            return f"Dimension comparison needs to be between a 'Dimension' and index of type '{index_type}', got '{left}' and '{right}'."
+
         if isinstance(left.type, ts.DimensionType):
             if not right.type == index_type:
                 raise errors.DSLError(
                     right.location,
-                    f"Expected an {index_type}, but got '{right.type}' instead.",
+                    error_msg(left.type, right.type),
                 )
             return ts.DomainType(dims=[left.type.dim])
         elif isinstance(right.type, ts.DimensionType):
             if not left.type == index_type:
                 raise errors.DSLError(
                     left.location,
-                    f"Expected an {index_type}, but got '{right.type}' instead.",
+                    error_msg(left.type, right.type),
                 )
             return ts.DomainType(dims=[right.type.dim])
         else:
@@ -993,9 +996,9 @@ class FieldOperatorTypeDeduction(traits.VisitorWithSymbolTableTrait, NodeTransla
         )
 
     def _visit_concat_where(self, node: foast.Call, **kwargs: Any) -> foast.Call:
-        mask_type, true_branch_type, false_branch_type = (arg.type for arg in node.args)
+        cond_type, true_branch_type, false_branch_type = (arg.type for arg in node.args)
 
-        assert isinstance(mask_type, ts.DomainType)
+        assert isinstance(cond_type, ts.DomainType)
         assert all(
             isinstance(el, (ts.FieldType, ts.ScalarType))
             for arg in (true_branch_type, false_branch_type)
@@ -1006,14 +1009,18 @@ class FieldOperatorTypeDeduction(traits.VisitorWithSymbolTableTrait, NodeTransla
             collection_type=ts.TupleType,
             result_collection_constructor=lambda el: ts.TupleType(types=list(el)),
         )
-        def deduce_return_type(tb: ts.FieldType | ts.ScalarType, fb: ts.FieldType | ts.ScalarType):
+        def deduce_return_type(
+            tb: ts.FieldType | ts.ScalarType, fb: ts.FieldType | ts.ScalarType
+        ) -> ts.FieldType:
             if (t_dtype := type_info.extract_dtype(tb)) != (f_dtype := type_info.extract_dtype(fb)):
                 raise errors.DSLError(
                     node.location,
                     f"Field arguments must be of same dtype, got '{t_dtype}' != '{f_dtype}'.",
                 )
-            return_dims = promote_dims(mask_type.dims, type_info.promote(tb, fb).dims)
-            return_type = ts.FieldType(dims=return_dims, dtype=type_info.promote(t_dtype, f_dtype))
+            return_dims = promote_dims(
+                cond_type.dims, type_info.extract_dims(type_info.promote(tb, fb))
+            )
+            return_type = ts.FieldType(dims=return_dims, dtype=t_dtype)
             return return_type
 
         return_type = deduce_return_type(true_branch_type, false_branch_type)
