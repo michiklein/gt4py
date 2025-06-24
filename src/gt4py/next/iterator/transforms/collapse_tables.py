@@ -6,31 +6,8 @@ from gt4py.next import Dimension
 from gt4py.next.iterator.ir_utils import ir_makers as im
 from gt4py.next.iterator import ir as itir
 from gt4py.next import common
+import pdb
 
-# axis indices
-edge_idx = im.deref(
-    im.index(itir.AxisLiteral(value="Edge", kind=common.DimensionKind.HORIZONTAL))
-)
-cell_idx = im.deref(
-    im.index(itir.AxisLiteral(value="Cell", kind=common.DimensionKind.HORIZONTAL))
-)
-
-num_edges_ref = im.deref(ir.SymRef(id="num_edges"))
-num_cells_ref = im.deref(ir.SymRef(id="num_cells"))
-
-div3  = im.divides_(num_edges_ref, im.literal("3", "int64"))
-twod3 = im.multiplies_(im.literal("2", "int64"), div3)
-half  = im.divides_(num_cells_ref, im.literal("2", "int64"))
-
-edge_cond1 = im.less(edge_idx, div3)
-edge_cond2 = im.and_(
-    im.not_(edge_cond1),
-    im.less(edge_idx, twod3)
-)
-edge_cond3 = im.not_(im.less(edge_idx, twod3))
-
-cell_cond1 = im.less(cell_idx, half)
-cell_cond2 = im.not_(cell_cond1)
 
 def make_shift(symref, index, args):
     if isinstance(symref, ir.SymbolRef):
@@ -141,6 +118,12 @@ lookup_v = {
 }
 
 class CollapseTables(PreserveLocationVisitor, NodeTranslator):
+    
+    # def visit_Program(self, node: ir.Program, **kwargs):
+    #     assert "module_name" in kwargs
+    #     entry_params = self.visit(node.params, external_arg=True, **kwargs)
+    #     sid_params = self.visit(node.params, external_arg=False, **kwargs)
+    #     return self.generic_visit(node, entry_params=entry_params, sid_params=sid_params, **kwargs)
 
     def visit_FunCall(self, node: ir.FunCall):
         node = self.generic_visit(node)
@@ -176,147 +159,70 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
             elif key.startswith("V2"):
                 return self._process_vertex_lookup(key, node.args, flat_args)
         return node
+    
+    # def _process_edge_lookup(self, key, args, flat_args):
+    #     east = self._lookup_from_table(key, lookup_e_e, args, flat_args)
+    #     north = self._lookup_from_table(key, lookup_e_n, args, flat_args)
+    #     southeast = self._lookup_from_table(key, lookup_e_se, args, flat_args)
+        
+    #     true_lit = im.literal("True", "bool")
+    #     false_lit = im.literal("False", "bool")
+        
+    #     return im.if_(
+    #         true_lit, 
+    #         east,
+    #         im.if_(
+    #             false_lit,
+    #             north,
+    #             southeast
+    #         )
+    #     )
 
-
-
+    # def _process_cell_lookup(self, key, args, flat_args):
+    #     up = self._lookup_from_table(key, lookup_c_u, args, flat_args)
+    #     down = self._lookup_from_table(key, lookup_c_d, args, flat_args)
+        
+    #     true_lit = im.literal("True", "bool")
+        
+    #     return im.if_(true_lit, up, down)
+    
     def _process_edge_lookup(self, key, args, flat_args):
-        east      = self._lookup_from_table(key, lookup_e_e,  args, flat_args)
-        north     = self._lookup_from_table(key, lookup_e_n,  args, flat_args)
+        east      = self._lookup_from_table(key, lookup_e_e, args, flat_args)
+        north     = self._lookup_from_table(key, lookup_e_n, args, flat_args)
         southeast = self._lookup_from_table(key, lookup_e_se, args, flat_args)
-        zero      = im.literal("0.0", "float64")
-
-        part1 = concat_where(edge_cond1,      east,      zero)
-        part2 = concat_where(edge_cond2,      north,     zero)
-        part3 = concat_where(edge_cond3,      southeast, zero)
-        return im.plus(im.plus(part1, part2), part3)
+        
+        edge_idx      = im.index(itir.AxisLiteral(value="Edge", kind=common.DimensionKind.HORIZONTAL))
+        num_edges     = 2945 #ir.SymRef(id="num_edges")
+        div3          = im.divides_(num_edges, im.literal("3", "int32"))
+        two3          = im.multiplies_(im.literal("2", "int32"), div3)
+        cond1         = im.less(edge_idx, div3)
+        cond2         = im.less(edge_idx, two3)
+        
+        return im.if_(
+            cond1,
+            east,
+            im.if_(cond2, north, southeast)
+        )
 
     def _process_cell_lookup(self, key, args, flat_args):
-        up   = self._lookup_from_table(key, lookup_c_u, args, flat_args)
-        down = self._lookup_from_table(key, lookup_c_d, args, flat_args)
-        zero = im.literal("0.0", "float64")
-
-        return im.plus(
-            concat_where(cell_cond1, up,   zero),
-            concat_where(cell_cond2, down, zero),
-        )
+        up           = self._lookup_from_table(key, lookup_c_u, args, flat_args)
+        down         = self._lookup_from_table(key, lookup_c_d, args, flat_args)
+        cell_idx     = im.deref(im.index(itir.AxisLiteral(value="Cell", kind=common.DimensionKind.HORIZONTAL)))
+        num_cells    = 1922 #ir.SymRef(id="num_cells")
+        half         = im.divides_(num_cells, im.literal("2", "int32"))
+        cond         = im.less(cell_idx, half)
+        return im.if_(cond, up, down)
 
     def _process_vertex_lookup(self, key, args, flat_args):
         return self._lookup_from_table(key, lookup_v, args, flat_args)
 
     def _lookup_from_table(self, key, table, args, flat_args):
         sym = table[key]
-        # direct self–access is already a FunCall(field, …)
         if sym == "self":
             return args[0]
-        # parse something like "E2C2E[1]"
         if "[" in sym and sym.endswith("]"):
             name, rest = sym.split("[", 1)
             idx = int(rest[:-1])
         else:
             name, idx = sym, 0
-        # this builds the shift FunCall(fun=SymRef("shift"), args=[…]) with your args
         return make_shift(name, idx, args)
-
-    
-    # def _process_edge_lookup(self, key, args, flat_args):
-    #     east      = self._lookup_from_table(key, lookup_e_e,  args, flat_args)
-    #     north     = self._lookup_from_table(key, lookup_e_n,  args, flat_args)
-    #     southeast = self._lookup_from_table(key, lookup_e_se, args, flat_args)
-        
-    #     # original 3-way if:
-    #     return im.if_(edge_cond1,
-    #                   east,
-    #                   im.if_(edge_cond2,
-    #                          north,
-    #                          southeast)
-    #                  )
-
-    # def _process_cell_lookup(self, key, args, flat_args):
-    #     up   = self._lookup_from_table(key, lookup_c_u, args, flat_args)
-    #     down = self._lookup_from_table(key, lookup_c_d, args, flat_args)
-        
-    #     # original 2-way if:
-    #     return im.if_(cell_cond1,
-    #                   up,
-    #                   down
-    #                  )
-
-    # def _process_edge_lookup(self, key, args, flat_args):
-    #     east      = self._lookup_from_table(key, lookup_e_e,  args, flat_args)
-    #     north     = self._lookup_from_table(key, lookup_e_n,  args, flat_args)
-    #     southeast = self._lookup_from_table(key, lookup_e_se, args, flat_args)
-    #     zero      = im.literal("0.0", "float64")
-
-    #     part1 = concat_where(edge_cond1,      east,      zero)
-    #     part2 = concat_where(edge_cond2,      north,     zero)
-    #     part3 = concat_where(edge_cond3,      southeast, zero)
-    #     return im.plus(im.plus(part1, part2), part3)
-
-    # def _process_cell_lookup(self, key, args, flat_args):
-    #     up   = self._lookup_from_table(key, lookup_c_u, args, flat_args)
-    #     down = self._lookup_from_table(key, lookup_c_d, args, flat_args)
-    #     zero = im.literal("0.0", "float64")
-
-    #     return im.plus(
-    #         concat_where(cell_cond1, up,   zero),
-    #         concat_where(cell_cond2, down, zero),
-    #     )
-
-# class CollapseTables(PreserveLocationVisitor, NodeTranslator):
-
-#     def visit_FunCall(self, node: ir.FunCall):
-#         node = self.generic_visit(node)
-
-#         if (
-#             isinstance(node.fun, ir.FunCall)
-#             and isinstance(node.fun.fun, ir.SymRef)
-#             and node.fun.fun.id == "shift"
-#             and node.fun.args
-#             and node.args
-#         ):
-#             flat_args = node.fun.args
-#             if len(flat_args) % 2 != 0:
-#                 return node
-
-#             key_parts = []
-#             for i in range(0, len(flat_args), 2):
-#                 symbol_arg = flat_args[i]
-#                 offset_arg = flat_args[i + 1]
-
-#                 if (
-#                     isinstance(symbol_arg, ir.OffsetLiteral)
-#                     and isinstance(symbol_arg.value, ir.SymbolRef)
-#                     and isinstance(offset_arg, ir.OffsetLiteral)
-#                     and isinstance(offset_arg.value, int)
-#                 ):
-#                     part = f"{symbol_arg.value}[{offset_arg.value}]"
-#                     key_parts.append(part)
-#                 else:
-#                     return node
-
-#             key = "".join(key_parts)
-                
-#             lookup_e = lookup_e_se
-
-#             lookup_c = lookup_c_u
-
-#             for table in [lookup_v, lookup_c, lookup_e]:
-#                 if key in table:
-#                     replacement = table[key]
-#                     if replacement == "self":
-#                         return node.args[0]
-#                     else:
-#                         sym_name, index_str = replacement.split("[")
-#                         index = int(index_str.rstrip("]"))
-#                         return ir.FunCall(
-#                             fun=ir.FunCall(
-#                                 fun=ir.SymRef(id="shift"),
-#                                 args=[
-#                                     ir.OffsetLiteral(value=ir.SymbolRef(sym_name)),
-#                                     ir.OffsetLiteral(value=index),
-#                                 ],
-#                             ),
-#                             args=node.args,
-#                         )
-
-#         return node

@@ -177,8 +177,9 @@ def apply_common_transforms(
         ir, opcount_preserving=False, force_inline_lambda_args=force_inline_lambda_args
     )
     ir = NormalizeShifts().visit(ir)
-    # pdb.set_trace()
+    print("before CollapseTables\n", ir)
     ir = CollapseTables().visit(ir)
+    print("after CollapseTables\n", ir)
     assert isinstance(ir, itir.Program)
     return ir
 
