@@ -7,7 +7,7 @@ from gt4py.next.iterator.ir_utils import ir_makers as im
 from gt4py.next.iterator import ir as itir
 from gt4py.next import common
 import pdb
-
+from gt4py.next.iterator.ir_utils.common_pattern_matcher import is_applied_as_fieldop
 
 lookup_e_se = {
     "E2C[0]C2E[0]": "E2C2E[0]", "E2C[0]C2E[1]": "E2C2E[1]", "E2C[0]C2E[2]": "self",
@@ -102,7 +102,42 @@ lookup_v = {
 
 class CollapseTables(PreserveLocationVisitor, NodeTranslator):
 
+    def __init__(self):
+        super().__init__()
+        self.state = None
+
     def visit_FunCall(self, node: ir.FunCall):
+        if is_applied_as_fieldop(node):
+            self.state = {"needs_index": False, "index_type": None}
+            index_param = ir.Sym(id="edge_idx")
+            self.state["index_param"] = index_param
+            
+            visited_node = self.generic_visit(node)
+            
+            if self.state["needs_index"]:
+                index_expr = im.index(itir.AxisLiteral(
+                    value=self.state["index_type"], 
+                    kind=common.DimensionKind.HORIZONTAL
+                ))
+                
+                if isinstance(visited_node.fun, ir.FunCall) and len(visited_node.fun.args) > 0:
+                    stencil = visited_node.fun.args[0]
+                    if isinstance(stencil, ir.Lambda):
+                        new_stencil = ir.Lambda(
+                            params=stencil.params + [self.state["index_param"]],
+                            expr=stencil.expr
+                        )
+                        visited_node = ir.FunCall(
+                            fun=ir.FunCall(
+                                fun=visited_node.fun.fun,
+                                args=[new_stencil] + visited_node.fun.args[1:]
+                            ),
+                            args=visited_node.args + [index_expr]
+                        )
+            
+            self.state = None
+            return visited_node
+        
         node = self.generic_visit(node)
         if (
             isinstance(node.fun, ir.FunCall)
@@ -130,8 +165,14 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
                and key not in lookup_c_u  and key not in lookup_c_d  and key not in lookup_v:
                 return node
             if key.startswith("E2"):
+                if self.state is not None:
+                    self.state["needs_index"] = True
+                    self.state["index_type"] = "Edge"
                 return self._process_edge_lookup(key, node.args, flat_args)
             elif key.startswith("C2"):
+                if self.state is not None:
+                    self.state["needs_index"] = True
+                    self.state["index_type"] = "Cell"
                 return self._process_cell_lookup(key, node.args, flat_args)
             elif key.startswith("V2"):
                 return self._process_vertex_lookup(key, node.args, flat_args)
@@ -142,7 +183,11 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
         north     = self._lookup_from_table(key, lookup_e_n, args, flat_args)
         southeast = self._lookup_from_table(key, lookup_e_se, args, flat_args)
         
-        edge_idx      = im.index(itir.AxisLiteral(value="Edge", kind=common.DimensionKind.HORIZONTAL))
+        if self.state and "index_param" in self.state:
+            edge_idx = ir.SymRef(id=self.state["index_param"].id)
+        else:
+            edge_idx = im.deref(im.index(itir.AxisLiteral(value="Edge", kind=common.DimensionKind.HORIZONTAL)))
+        
         num_edges     = 2945 #ir.SymRef(id="num_edges")
         div3          = im.divides_(num_edges, im.literal("3", "int32"))
         two3          = im.multiplies_(im.literal("2", "int32"), div3)
@@ -158,7 +203,12 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
     def _process_cell_lookup(self, key, args, flat_args):
         up           = self._lookup_from_table(key, lookup_c_u, args, flat_args)
         down         = self._lookup_from_table(key, lookup_c_d, args, flat_args)
-        cell_idx     = im.deref(im.index(itir.AxisLiteral(value="Cell", kind=common.DimensionKind.HORIZONTAL)))
+        
+        if self.state and "index_param" in self.state:
+            cell_idx = ir.SymRef(id=self.state["index_param"].id)
+        else:
+            cell_idx = im.deref(im.index(itir.AxisLiteral(value="Cell", kind=common.DimensionKind.HORIZONTAL)))
+        
         num_cells    = 1922 #ir.SymRef(id="num_cells")
         half         = im.divides_(num_cells, im.literal("2", "int32"))
         cond         = im.less(cell_idx, half)
