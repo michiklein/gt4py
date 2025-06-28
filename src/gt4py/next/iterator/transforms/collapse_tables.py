@@ -9,23 +9,6 @@ from gt4py.next import common
 import pdb
 
 
-def make_shift(symref, index, args):
-    if isinstance(symref, ir.SymbolRef):
-        sym_lit = symref
-    else:
-        sym_lit = ir.SymbolRef(symref)
-    return ir.FunCall(
-        fun=ir.FunCall(
-            fun=ir.SymRef(id="shift"),
-            args=[
-                ir.OffsetLiteral(value=sym_lit),
-                ir.OffsetLiteral(value=index),
-            ],
-        ),
-        args=args,
-    )
-
-
 lookup_e_se = {
     "E2C[0]C2E[0]": "E2C2E[0]", "E2C[0]C2E[1]": "E2C2E[1]", "E2C[0]C2E[2]": "self",
     "E2C[1]C2E[0]": "self",      "E2C[1]C2E[1]": "E2C2E[2]", "E2C[1]C2E[2]": "E2C2E[3]",
@@ -118,12 +101,6 @@ lookup_v = {
 }
 
 class CollapseTables(PreserveLocationVisitor, NodeTranslator):
-    
-    # def visit_Program(self, node: ir.Program, **kwargs):
-    #     assert "module_name" in kwargs
-    #     entry_params = self.visit(node.params, external_arg=True, **kwargs)
-    #     sid_params = self.visit(node.params, external_arg=False, **kwargs)
-    #     return self.generic_visit(node, entry_params=entry_params, sid_params=sid_params, **kwargs)
 
     def visit_FunCall(self, node: ir.FunCall):
         node = self.generic_visit(node)
@@ -159,32 +136,6 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
             elif key.startswith("V2"):
                 return self._process_vertex_lookup(key, node.args, flat_args)
         return node
-    
-    # def _process_edge_lookup(self, key, args, flat_args):
-    #     east = self._lookup_from_table(key, lookup_e_e, args, flat_args)
-    #     north = self._lookup_from_table(key, lookup_e_n, args, flat_args)
-    #     southeast = self._lookup_from_table(key, lookup_e_se, args, flat_args)
-        
-    #     true_lit = im.literal("True", "bool")
-    #     false_lit = im.literal("False", "bool")
-        
-    #     return im.if_(
-    #         true_lit, 
-    #         east,
-    #         im.if_(
-    #             false_lit,
-    #             north,
-    #             southeast
-    #         )
-    #     )
-
-    # def _process_cell_lookup(self, key, args, flat_args):
-    #     up = self._lookup_from_table(key, lookup_c_u, args, flat_args)
-    #     down = self._lookup_from_table(key, lookup_c_d, args, flat_args)
-        
-    #     true_lit = im.literal("True", "bool")
-        
-    #     return im.if_(true_lit, up, down)
     
     def _process_edge_lookup(self, key, args, flat_args):
         east      = self._lookup_from_table(key, lookup_e_e, args, flat_args)
@@ -225,4 +176,20 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
             idx = int(rest[:-1])
         else:
             name, idx = sym, 0
-        return make_shift(name, idx, args)
+        return self._make_shift(name, idx, args)
+    
+    def _make_shift(self, symref, index, args):
+        if isinstance(symref, ir.SymbolRef):
+            sym_lit = symref
+        else:
+            sym_lit = ir.SymbolRef(symref)
+        return ir.FunCall(
+            fun=ir.FunCall(
+                fun=ir.SymRef(id="shift"),
+                args=[
+                    ir.OffsetLiteral(value=sym_lit),
+                    ir.OffsetLiteral(value=index),
+                ],
+            ),
+            args=args,
+        )
