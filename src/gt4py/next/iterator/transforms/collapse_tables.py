@@ -184,15 +184,15 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
         southeast = self._lookup_from_table(key, lookup_e_se, args, flat_args)
         
         if self.state and "index_param" in self.state:
-            edge_idx = ir.SymRef(id=self.state["index_param"].id)
+            edge_idx = ir.SymRef(id=self.state["index_param"].id)  # Remove deref here
         else:
             edge_idx = im.deref(im.index(itir.AxisLiteral(value="Edge", kind=common.DimensionKind.HORIZONTAL)))
         
         num_edges     = 2945 #ir.SymRef(id="num_edges")
         div3          = im.divides_(num_edges, im.literal("3", "int32"))
         two3          = im.multiplies_(im.literal("2", "int32"), div3)
-        cond1         = im.less(edge_idx, div3)
-        cond2         = im.less(edge_idx, two3)
+        cond1         = im.less(im.deref(edge_idx), div3)  # Add deref here
+        cond2         = im.less(im.deref(edge_idx), two3)  # And here
         
         return im.if_(
             cond1,
@@ -205,13 +205,13 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
         down         = self._lookup_from_table(key, lookup_c_d, args, flat_args)
         
         if self.state and "index_param" in self.state:
-            cell_idx = ir.SymRef(id=self.state["index_param"].id)
+            cell_idx = ir.SymRef(id=self.state["index_param"].id)  # Remove deref here
         else:
             cell_idx = im.deref(im.index(itir.AxisLiteral(value="Cell", kind=common.DimensionKind.HORIZONTAL)))
         
         num_cells    = 1922 #ir.SymRef(id="num_cells")
         half         = im.divides_(num_cells, im.literal("2", "int32"))
-        cond         = im.less(cell_idx, half)
+        cond         = im.less(im.deref(cell_idx), half)  # Add deref here
         return im.if_(cond, up, down)
 
     def _process_vertex_lookup(self, key, args, flat_args):
