@@ -322,7 +322,7 @@ class GTFN_lowering(eve.NodeTranslator, eve.VisitorWithSymbolTableTrait):
     ) -> Program:
         if not isinstance(node, itir.Program):
             raise TypeError(f"Expected a 'Program', got '{type(node).__name__}'.")
-
+        # print("ITIR *before* type inference:", node)
         node = itir_type_inference.infer(node, offset_provider_type=offset_provider_type)
         grid_type = ir_utils_misc.grid_type_from_program(node)
         if grid_type == common.GridType.UNSTRUCTURED:

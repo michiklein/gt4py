@@ -138,6 +138,7 @@ def _(lhs: ts.ScalarType, rhs: ts.ScalarType) -> ts.ScalarType:
         return rhs
     if isinstance(rhs, ts.DeferredType):
         return lhs
+    # print(f"lhs: {type(lhs)}, {lhs}, rhs: {type(rhs)}, {rhs}")
     assert lhs == rhs
     return lhs
 
@@ -152,10 +153,16 @@ def _(arg: ts.ScalarType) -> ts.ScalarType:
 def synthesize_binary_math_comparison_builtins(
     lhs, rhs
 ) -> ts.ScalarType | ts.TupleType | ts.DomainType:
+    # print(f"lhs: {type(lhs)}, {lhs}, rhs: {type(rhs)}, {rhs}")
+    # import pdb; pdb.set_trace()
     if isinstance(lhs, ts.ScalarType) and isinstance(rhs, ts.DimensionType):
         return ts.DomainType(dims=[rhs.dim])
     if isinstance(lhs, ts.DimensionType) and isinstance(rhs, ts.ScalarType):
         return ts.DomainType(dims=[lhs.dim])
+    if isinstance(lhs, ts.FieldType) and isinstance(rhs, ts.ScalarType):
+        return ts.ScalarType(kind=ts.ScalarKind.BOOL)
+    if isinstance(lhs, ts.ScalarType) and isinstance(rhs, ts.FieldType):
+        return ts.ScalarType(kind=ts.ScalarKind.BOOL)
     assert all(isinstance(lhs, (ts.ScalarType, ts.DeferredType)) for arg in (lhs, rhs))
     return ts.ScalarType(kind=ts.ScalarKind.BOOL)
 
@@ -178,6 +185,7 @@ def _(lhs, rhs) -> ts.ScalarType | ts.TupleType | ts.DomainType:
 def deref(it: it_ts.IteratorType | ts.DeferredType) -> ts.DataType | ts.DeferredType:
     if isinstance(it, ts.DeferredType):
         return ts.DeferredType(constraint=None)
+    # print(f"it: {it}")    
     assert isinstance(it, it_ts.IteratorType)
     assert _is_derefable_iterator_type(it)
     return it.element_type
@@ -209,6 +217,7 @@ def if_(
         )(functools.partial(if_, pred))(true_branch, false_branch)
 
     assert not isinstance(true_branch, ts.TupleType) and not isinstance(false_branch, ts.TupleType)
+    
     assert isinstance(pred, ts.DeferredType) or (
         isinstance(pred, ts.ScalarType) and pred.kind == ts.ScalarKind.BOOL
     )
