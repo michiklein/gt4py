@@ -204,5 +204,7 @@ def apply_fieldview_transforms(
 
     ir = infer_domain.infer_program(ir, offset_provider=offset_provider)
     ir = prune_broadcast.PruneBroadcast.apply(ir)
-    ir = CollapseTables().visit(ir)
+    if os.getenv("GT4PY_ENABLE_COLLAPSE_TABLES", "0") in ("1", "true", "True", "TRUE"):
+        ir = CollapseTables().visit(ir)
+        print("after CollapseTables\n", ir)
     return ir
