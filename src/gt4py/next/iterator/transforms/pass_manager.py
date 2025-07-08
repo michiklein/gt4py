@@ -34,7 +34,9 @@ from gt4py.next.iterator.transforms.merge_let import MergeLet
 from gt4py.next.iterator.transforms.normalize_shifts import NormalizeShifts
 from gt4py.next.iterator.transforms.unroll_reduce import UnrollReduce
 from gt4py.next.iterator.type_system.inference import infer
-
+from gt4py.next.iterator.transforms.collapse_tables import CollapseTables
+import pdb
+import os
 
 class GTIRTransform(Protocol):
     def __call__(
@@ -173,9 +175,13 @@ def apply_common_transforms(
             raise RuntimeError("Reduction unrolling failed.")
 
     ir = InlineLambdas.apply(
-        ir, opcount_preserving=True, force_inline_lambda_args=force_inline_lambda_args
+        ir, opcount_preserving=False, force_inline_lambda_args=force_inline_lambda_args
     )
-
+    ir = NormalizeShifts().visit(ir)
+    print("before CollapseTables\n", ir)
+    if os.getenv("GT4PY_DISABLE_COLLAPSE_TABLES", "0") not in ("1", "true", "True"):
+        ir = CollapseTables().visit(ir)
+        print("after CollapseTables\n", ir)
     assert isinstance(ir, itir.Program)
     return ir
 
@@ -198,4 +204,7 @@ def apply_fieldview_transforms(
 
     ir = infer_domain.infer_program(ir, offset_provider=offset_provider)
     ir = remove_broadcast.RemoveBroadcast.apply(ir)
+    if os.getenv("GT4PY_ENABLE_COLLAPSE_TABLES", "0") in ("1", "true", "True", "TRUE"):
+        ir = CollapseTables().visit(ir)
+        print("after CollapseTables\n", ir)
     return ir
