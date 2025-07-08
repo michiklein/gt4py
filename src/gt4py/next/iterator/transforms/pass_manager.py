@@ -36,6 +36,7 @@ from gt4py.next.iterator.transforms.unroll_reduce import UnrollReduce
 from gt4py.next.iterator.type_system.inference import infer
 from gt4py.next.iterator.transforms.collapse_tables import CollapseTables
 import pdb
+import os
 
 class GTIRTransform(Protocol):
     def __call__(
@@ -178,8 +179,9 @@ def apply_common_transforms(
     )
     ir = NormalizeShifts().visit(ir)
     print("before CollapseTables\n", ir)
-    ir = CollapseTables().visit(ir)
-    print("after CollapseTables\n", ir)
+    if os.getenv("GT4PY_DISABLE_COLLAPSE_TABLES", "0") not in ("1", "true", "True"):
+        ir = CollapseTables().visit(ir)
+        print("after CollapseTables\n", ir)
     assert isinstance(ir, itir.Program)
     return ir
 
