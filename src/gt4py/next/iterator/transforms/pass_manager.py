@@ -182,6 +182,7 @@ def apply_common_transforms(
     if os.getenv("GT4PY_DISABLE_COLLAPSE_TABLES", "0") not in ("1", "true", "True"):
         ir = CollapseTables().visit(ir)
         print("after CollapseTables\n", ir)
+    # ir = CommonSubexpressionElimination.apply(ir, offset_provider_type=offset_provider_type)
     assert isinstance(ir, itir.Program)
     return ir
 
@@ -204,6 +205,7 @@ def apply_fieldview_transforms(
 
     ir = infer_domain.infer_program(ir, offset_provider=offset_provider)
     ir = remove_broadcast.RemoveBroadcast.apply(ir)
+    print("before CollapseTables\n", ir)
     if os.getenv("GT4PY_ENABLE_COLLAPSE_TABLES", "0") in ("1", "true", "True", "TRUE"):
         ir = CollapseTables().visit(ir)
         print("after CollapseTables\n", ir)
