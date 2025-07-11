@@ -108,11 +108,7 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
 
     def visit_FunCall(self, node: ir.FunCall):
         if is_applied_as_fieldop(node):
-            self.state = {
-                "needs_index": False,
-                "index_type": None,
-                "index_param": None,
-            }
+            self.state = {"needs_index": False, "index_type": None}
             index_param = ir.Sym(id="edge_idx")
             self.state["index_param"] = index_param
             
