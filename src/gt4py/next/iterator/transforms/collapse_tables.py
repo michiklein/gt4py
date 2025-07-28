@@ -1,4 +1,5 @@
 #MKLEIN MASTERS THESIS
+import os
 from gt4py.eve import NodeTranslator, PreserveLocationVisitor
 from gt4py.next.iterator import ir
 from gt4py.next.ffront.experimental import concat_where
@@ -6,6 +7,7 @@ from gt4py.next import Dimension
 from gt4py.next.iterator.ir_utils import ir_makers as im
 from gt4py.next.iterator import ir as itir
 from gt4py.next import common
+
 import pdb
 from gt4py.next.iterator.ir_utils.common_pattern_matcher import is_applied_as_fieldop
 
@@ -208,11 +210,23 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
         else:
             edge_idx = im.deref(im.index(itir.AxisLiteral(value="Edge", kind=common.DimensionKind.HORIZONTAL)))
 
-        num_edges     = im.deref(ir.SymRef(id="num_edges"))
-        div3          = im.divides_(num_edges, im.literal("3", "int32"))
-        two3          = im.multiplies_(im.literal("2", "int32"), div3)
-        cond1         = im.less(im.deref(edge_idx), div3)  
-        cond2         = im.less(im.deref(edge_idx), two3)  
+        # Check environment variable directly
+        block_32_flag = os.environ.get("GT4PY_COLLAPSE_TABLES_BLOCK_32", "").lower() in ["1", "true", "True", "TRUE"]
+        
+        if block_32_flag:
+            # Each lookup is in its own block of 32, repeating every 96
+            block_size = im.literal("32", "int32")
+            block_idx = im.divides_(im.deref(edge_idx), block_size)
+            mod3 = im.modulo_(block_idx, im.literal("3", "int32"))
+            cond1 = im.equal(mod3, im.literal("0", "int32"))  # east
+            cond2 = im.equal(mod3, im.literal("1", "int32"))  # north
+        else:
+            # Original logic with blocks of 3
+            num_edges     = im.deref(ir.SymRef(id="num_edges"))
+            div3          = im.divides_(num_edges, im.literal("3", "int32"))
+            two3          = im.multiplies_(im.literal("2", "int32"), div3)
+            cond1         = im.less(im.deref(edge_idx), div3)  
+            cond2         = im.less(im.deref(edge_idx), two3)  
         
         return im.if_(
             cond1,
@@ -229,9 +243,20 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
         else:
             cell_idx = im.deref(im.index(itir.AxisLiteral(value="Cell", kind=common.DimensionKind.HORIZONTAL)))
 
-        num_cells    = im.deref(ir.SymRef(id="num_cells"))
-        half         = im.divides_(num_cells, im.literal("2", "int32"))
-        cond         = im.less(im.deref(cell_idx), half) 
+        # Check environment variable directly
+        block_32_flag = os.environ.get("GT4PY_COLLAPSE_TABLES_BLOCK_32", "").lower() in ["1", "true", "True", "TRUE"]
+        
+        if block_32_flag:
+            # Each lookup is in its own block of 32, alternating up/down
+            block_size = im.literal("32", "int32")
+            block_idx = im.divides_(im.deref(cell_idx), block_size)
+            mod2 = im.modulo_(block_idx, im.literal("2", "int32"))
+            cond = im.equal(mod2, im.literal("0", "int32"))  # up if even, down if odd
+        else:
+            # Original logic with half
+            num_cells    = im.deref(ir.SymRef(id="num_cells"))
+            half         = im.divides_(num_cells, im.literal("2", "int32"))
+            cond         = im.less(im.deref(cell_idx), half) 
         return im.if_(cond, up, down)
 
     def _process_vertex_lookup(self, key, args, flat_args):
