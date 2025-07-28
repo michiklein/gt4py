@@ -55,7 +55,7 @@ lookup_e_n = {
 }
 
 lookup_c_u = {
-    "C2E[0]E2C[0]": "self","C2E[0]E2C[1]": "C2E2C[0]","C2E[1]E2C[0]": "C2E2C[1]","C2E[1]E2C[1]": "self","C2E[2]E2C[0]": "self","C2E[2]E2C[1]": "C2E2C[2]",
+    "C2E[0]E2C[0]": "C2E2C[0]","C2E[0]E2C[1]": "self","C2E[1]E2C[0]": "self","C2E[1]E2C[1]": "C2E2C[1]","C2E[2]E2C[0]": "self","C2E[2]E2C[1]": "C2E2C[2]",
     "C2E[0]E2V[0]": "C2V[0]","C2E[0]E2V[1]": "C2V[1]","C2E[1]E2V[0]": "C2V[1]","C2E[1]E2V[1]": "C2V[2]","C2E[2]E2V[0]": "C2V[0]","C2E[2]E2V[1]": "C2V[2]",
     "C2V[0]V2C[0]": "C2V2C[0]","C2V[0]V2C[1]": "C2V2C[1]","C2V[0]V2C[2]": "C2V2C[3]","C2V[0]V2C[3]": "self","C2V[0]V2C[4]": "C2V2C[4]","C2V[0]V2C[5]": "C2V2C[5]",
     "C2V[1]V2C[0]": "C2V2C[0]","C2V[1]V2C[1]": "C2V2C[2]","C2V[1]V2C[2]": "C2V2C[6]","C2V[1]V2C[3]": "self","C2V[1]V2C[4]": "C2V2C[7]","C2V[1]V2C[5]": "C2V2C[8]",
@@ -66,7 +66,7 @@ lookup_c_u = {
 }
 
 lookup_c_d = {
-    "C2E[0]E2C[0]": "C2E2C[0]","C2E[0]E2C[1]": "self","C2E[1]E2C[0]": "C2E2C[1]","C2E[1]E2C[1]": "self","C2E[2]E2C[0]": "self","C2E[2]E2C[1]": "C2E2C[2]",
+    "C2E[0]E2C[0]": "C2E2C[0]","C2E[0]E2C[1]": "self","C2E[1]E2C[0]": "C2E2C[1]","C2E[1]E2C[1]": "self","C2E[2]E2C[0]": "C2E2C[2]","C2E[2]E2C[1]": "self",
     "C2E[0]E2V[0]": "C2V[0]","C2E[0]E2V[1]": "C2V[1]","C2E[1]E2V[0]": "C2V[1]","C2E[1]E2V[1]": "C2V[2]","C2E[2]E2V[0]": "C2V[0]","C2E[2]E2V[1]": "C2V[2]",
     "C2V[0]V2C[0]": "self","C2V[0]V2C[1]": "C2V2C[3]","C2V[0]V2C[2]": "C2V2C[4]","C2V[0]V2C[3]": "C2V2C[5]","C2V[0]V2C[4]": "C2V2C[0]","C2V[0]V2C[5]": "C2V2C[1]",
     "C2V[1]V2C[0]": "self","C2V[1]V2C[1]": "C2V2C[6]","C2V[1]V2C[2]": "C2V2C[7]","C2V[1]V2C[3]": "C2V2C[2]","C2V[1]V2C[4]": "C2V2C[0]","C2V[1]V2C[5]": "C2V2C[8]",
@@ -108,23 +108,39 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
 
     def visit_FunCall(self, node: ir.FunCall):
         if is_applied_as_fieldop(node):
-            self.state = {"needs_index": False, "index_type": None}
+            self.state = {
+                "needs_index": False, 
+                "index_type": None,
+                "needs_grid_params": False,
+                "grid_params": {}
+            }
             index_param = ir.Sym(id="edge_idx")
             self.state["index_param"] = index_param
             
             visited_node = self.generic_visit(node)
             
+            additional_params = []
+            additional_args = []
+
             if self.state["needs_index"]:
+                additional_params.append(self.state["index_param"])
                 index_expr = im.index(itir.AxisLiteral(
                     value=self.state["index_type"], 
                     kind=common.DimensionKind.HORIZONTAL
                 ))
-                
+                additional_args.append(index_expr)
+
+            if self.state["needs_grid_params"]:
+                for param_name, param_sym in self.state["grid_params"].items():
+                    additional_params.append(param_sym)
+                    additional_args.append(ir.SymRef(id=param_name))
+
+            if additional_params:
                 if isinstance(visited_node.fun, ir.FunCall) and len(visited_node.fun.args) > 0:
                     stencil = visited_node.fun.args[0]
                     if isinstance(stencil, ir.Lambda):
                         new_stencil = ir.Lambda(
-                            params=stencil.params + [self.state["index_param"]],
+                            params=stencil.params + additional_params,
                             expr=stencil.expr
                         )
                         visited_node = ir.FunCall(
@@ -132,7 +148,7 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
                                 fun=visited_node.fun.fun,
                                 args=[new_stencil] + visited_node.fun.args[1:]
                             ),
-                            args=visited_node.args + [index_expr]
+                            args=visited_node.args + additional_args
                         )
             
             self.state = None
@@ -168,11 +184,15 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
                 if self.state is not None:
                     self.state["needs_index"] = True
                     self.state["index_type"] = "Edge"
+                    self.state["needs_grid_params"] = True
+                    self.state["grid_params"]["num_edges"] = ir.Sym(id="num_edges")
                 return self._process_edge_lookup(key, node.args, flat_args)
             elif key.startswith("C2"):
                 if self.state is not None:
                     self.state["needs_index"] = True
                     self.state["index_type"] = "Cell"
+                    self.state["needs_grid_params"] = True
+                    self.state["grid_params"]["num_cells"] = ir.Sym(id="num_cells")
                 return self._process_cell_lookup(key, node.args, flat_args)
             elif key.startswith("V2"):
                 return self._process_vertex_lookup(key, node.args, flat_args)
@@ -184,15 +204,15 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
         southeast = self._lookup_from_table(key, lookup_e_se, args, flat_args)
         
         if self.state and "index_param" in self.state:
-            edge_idx = ir.SymRef(id=self.state["index_param"].id)  # Remove deref here
+            edge_idx = ir.SymRef(id=self.state["index_param"].id)
         else:
             edge_idx = im.deref(im.index(itir.AxisLiteral(value="Edge", kind=common.DimensionKind.HORIZONTAL)))
-        
-        num_edges     = 2945 #ir.SymRef(id="num_edges")
+
+        num_edges     = im.deref(ir.SymRef(id="num_edges"))
         div3          = im.divides_(num_edges, im.literal("3", "int32"))
         two3          = im.multiplies_(im.literal("2", "int32"), div3)
-        cond1         = im.less(im.deref(edge_idx), div3)  # Add deref here
-        cond2         = im.less(im.deref(edge_idx), two3)  # And here
+        cond1         = im.less(im.deref(edge_idx), div3)  
+        cond2         = im.less(im.deref(edge_idx), two3)  
         
         return im.if_(
             cond1,
@@ -205,13 +225,13 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
         down         = self._lookup_from_table(key, lookup_c_d, args, flat_args)
         
         if self.state and "index_param" in self.state:
-            cell_idx = ir.SymRef(id=self.state["index_param"].id)  # Remove deref here
+            cell_idx = ir.SymRef(id=self.state["index_param"].id)  
         else:
             cell_idx = im.deref(im.index(itir.AxisLiteral(value="Cell", kind=common.DimensionKind.HORIZONTAL)))
-        
-        num_cells    = 1922 #ir.SymRef(id="num_cells")
+
+        num_cells    = im.deref(ir.SymRef(id="num_cells"))
         half         = im.divides_(num_cells, im.literal("2", "int32"))
-        cond         = im.less(im.deref(cell_idx), half)  # Add deref here
+        cond         = im.less(im.deref(cell_idx), half) 
         return im.if_(cond, up, down)
 
     def _process_vertex_lookup(self, key, args, flat_args):

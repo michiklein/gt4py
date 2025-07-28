@@ -35,6 +35,7 @@ from gt4py.next.iterator.transforms.normalize_shifts import NormalizeShifts
 from gt4py.next.iterator.transforms.unroll_reduce import UnrollReduce
 from gt4py.next.iterator.type_system.inference import infer
 from gt4py.next.iterator.transforms.collapse_tables import CollapseTables
+from gt4py.next.iterator.transforms.collapse_ifs import CollapseIfs
 import pdb
 import os
 
@@ -179,9 +180,12 @@ def apply_common_transforms(
     )
     ir = NormalizeShifts().visit(ir)
     print("before CollapseTables\n", ir)
-    if os.getenv("GT4PY_DISABLE_COLLAPSE_TABLES", "0") not in ("1", "true", "True"):
+    if os.getenv("GT4PY_ENABLE_COLLAPSE_TABLES", "0") in ("1", "true", "True", "TRUE"):
         ir = CollapseTables().visit(ir)
         print("after CollapseTables\n", ir)
+        ir = CollapseIfs().visit(ir)
+        print("after CollapseIfs\n", ir)
+    
     # ir = CommonSubexpressionElimination.apply(ir, offset_provider_type=offset_provider_type)
     assert isinstance(ir, itir.Program)
     return ir
