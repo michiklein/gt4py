@@ -217,9 +217,9 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
             # Each lookup is in its own block of 32, repeating every 96
             block_size = im.literal("32", "int32")
             block_idx = im.divides_(im.deref(edge_idx), block_size)
-            mod3 = im.modulo_(block_idx, im.literal("3", "int32"))
-            cond1 = im.equal(mod3, im.literal("0", "int32"))  # east
-            cond2 = im.equal(mod3, im.literal("1", "int32"))  # north
+            mod3 = im.call("modulo")(block_idx, im.literal("3", "int32"))
+            cond1 = im.eq(mod3, im.literal("0", "int32"))  # east
+            cond2 = im.eq(mod3, im.literal("1", "int32"))  # north
         else:
             # Original logic with blocks of 3
             num_edges     = im.deref(ir.SymRef(id="num_edges"))
@@ -250,8 +250,8 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
             # Each lookup is in its own block of 32, alternating up/down
             block_size = im.literal("32", "int32")
             block_idx = im.divides_(im.deref(cell_idx), block_size)
-            mod2 = im.modulo_(block_idx, im.literal("2", "int32"))
-            cond = im.equal(mod2, im.literal("0", "int32"))  # up if even, down if odd
+            mod2 = im.call("modulo")(block_idx, im.literal("2", "int32"))
+            cond = im.eq(mod2, im.literal("0", "int32"))  # up if even, down if odd
         else:
             # Original logic with half
             num_cells    = im.deref(ir.SymRef(id="num_cells"))
