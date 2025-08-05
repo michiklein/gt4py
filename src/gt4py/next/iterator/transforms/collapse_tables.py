@@ -65,6 +65,9 @@ lookup_c_u = {
     "C2V[0]V2E[0]": "C2V2E[3]","C2V[0]V2E[1]": "C2V2E[4]","C2V[0]V2E[2]": "C2V2E[0]","C2V[0]V2E[3]": "C2V2E[5]","C2V[0]V2E[4]": "C2V2E[1]","C2V[0]V2E[5]": "C2V2E[6]",
     "C2V[1]V2E[0]": "C2V2E[2]","C2V[1]V2E[1]": "C2V2E[7]","C2V[1]V2E[2]": "C2V2E[8]","C2V[1]V2E[3]": "C2V2E[9]","C2V[1]V2E[4]": "C2V2E[1]","C2V[1]V2E[5]": "C2V2E[10]",
     "C2V[2]V2E[0]": "C2V2E[2]","C2V[2]V2E[1]": "C2V2E[11]","C2V[2]V2E[2]": "C2V2E[0]","C2V[2]V2E[3]": "C2V2E[12]","C2V[2]V2E[4]": "C2V2E[13]","C2V[2]V2E[5]": "C2V2E[14]",
+    "C2E2C[0]C2E2C[0]": "C2E2C2E2C[0]","C2E2C[0]C2E2C[1]": "C2E2C2E2C[1]","C2E2C[0]C2E2C[2]": "C2E2C2E2C[2]",
+    "C2E2C[1]C2E2C[0]": "C2E2C2E2C[1]","C2E2C[1]C2E2C[1]": "C2E2C2E2C[0]","C2E2C[1]C2E2C[2]": "C2E2C2E2C[3]",
+    "C2E2C[2]C2E2C[0]": "C2E2C2E2C[2]","C2E2C[2]C2E2C[1]": "C2E2C2E2C[3]","C2E2C[2]C2E2C[2]": "C2E2C2E2C[0]",
 }
 
 lookup_c_d = {
@@ -76,6 +79,9 @@ lookup_c_d = {
     "C2V[0]V2E[0]": "C2V2E[0]","C2V[0]V2E[1]": "C2V2E[3]","C2V[0]V2E[2]": "C2V2E[1]","C2V[0]V2E[3]": "C2V2E[4]","C2V[0]V2E[4]": "C2V2E[5]","C2V[0]V2E[5]": "C2V2E[6]",
     "C2V[1]V2E[0]": "C2V2E[7]","C2V[1]V2E[1]": "C2V2E[8]","C2V[1]V2E[2]": "C2V2E[1]","C2V[1]V2E[3]": "C2V2E[9]","C2V[1]V2E[4]": "C2V2E[2]","C2V[1]V2E[5]": "C2V2E[10]",
     "C2V[2]V2E[0]": "C2V2E[0]","C2V[2]V2E[1]": "C2V2E[11]","C2V[2]V2E[2]": "C2V2E[12]","C2V[2]V2E[3]": "C2V2E[13]","C2V[2]V2E[4]": "C2V2E[2]","C2V[2]V2E[5]": "C2V2E[14]",
+    "C2E2C[0]C2E2C[0]": "C2E2C2E2C[0]","C2E2C[0]C2E2C[1]": "C2E2C2E2C[1]","C2E2C[0]C2E2C[2]": "C2E2C2E2C[2]",
+    "C2E2C[1]C2E2C[0]": "C2E2C2E2C[1]","C2E2C[1]C2E2C[1]": "C2E2C2E2C[0]","C2E2C[1]C2E2C[2]": "C2E2C2E2C[3]",
+    "C2E2C[2]C2E2C[0]": "C2E2C2E2C[2]","C2E2C[2]C2E2C[1]": "C2E2C2E2C[3]","C2E2C[2]C2E2C[2]": "C2E2C2E2C[0]",
 }
 
 lookup_v = {
@@ -193,6 +199,7 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
                 if self.state is not None:
                     self.state["needs_index"] = True
                     self.state["index_type"] = "Cell"
+                    self.state["index_param"] = ir.Sym(id="cell_idx")
                     self.state["needs_grid_params"] = True
                     self.state["grid_params"]["num_cells"] = ir.Sym(id="num_cells")
                 return self._process_cell_lookup(key, node.args, flat_args)
@@ -217,7 +224,7 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
             # Each lookup is in its own block of 32, repeating every 96
             block_size = im.literal("32", "int32")
             block_idx = im.divides_(im.deref(edge_idx), block_size)
-            mod3 = im.call("modulo")(block_idx, im.literal("3", "int32"))
+            mod3 = im.call("mod")(block_idx, im.literal("3", "int32"))
             cond1 = im.eq(mod3, im.literal("0", "int32"))  # east
             cond2 = im.eq(mod3, im.literal("1", "int32"))  # north
         else:
@@ -250,7 +257,7 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
             # Each lookup is in its own block of 32, alternating up/down
             block_size = im.literal("32", "int32")
             block_idx = im.divides_(im.deref(cell_idx), block_size)
-            mod2 = im.call("modulo")(block_idx, im.literal("2", "int32"))
+            mod2 = im.call("mod")(block_idx, im.literal("2", "int32"))
             cond = im.eq(mod2, im.literal("0", "int32"))  # up if even, down if odd
         else:
             # Original logic with half
