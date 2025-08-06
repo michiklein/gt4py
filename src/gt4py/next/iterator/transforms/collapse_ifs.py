@@ -9,39 +9,19 @@ class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
         node = self.generic_visit(node)
         if not self._is_plus(node) or not any(self._contains_if(a) for a in node.args):
             return node
-        # try to collapse `if_` branches sharing the same condition
         node = self._collapse_same_conditions(node)
 
-        # `node` might no longer be a `plus` expression after collapsing. In that case we are
-        # done, but we still need to make sure that any *new* sub-expressions created by the
-        # collapsing step are visited as well (so that nested plus-chains are processed).
-
         if not self._is_plus(node):
-            # Just traverse its children once more to allow deeper collapsing.
             return self.generic_visit(node)
 
-        # Flatten nested `plus` nodes that may have been introduced by the collapsing step.
         args: list[ir.Expr] = []
-        # Child expressions have already been processed by the initial
-        # `self.generic_visit(node)` at the top of this function, so we do **not**
-        # need to visit them again here. We can safely flatten nested `plus`
-        # nodes without an extra recursive traversal, which avoids building up
-        # deep call stacks on very long chains.
-
         for a in node.args:
             if self._is_plus(a):
-                # `a` is already fully processed, so we simply splice its
-                # arguments into the current list.
                 args.extend(a.args)
             else:
                 args.append(a)
 
         new_node = args[0] if len(args) == 1 else self._make_plus_chain(args)
-
-        # We return the rebuilt node directly. The surrounding pass-manager
-        # infrastructure will re-run the transform on the whole IR until it
-        # reaches a fixed point, so an additional traversal *inside* this call
-        # is unnecessary and can lead to extremely deep recursion.
         return new_node
 
     def _make_plus_chain(self, items):
@@ -70,11 +50,6 @@ class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
                 then_terms.append(tp)
                 else_terms.append(ep)
 
-            # Heuristic safety check: avoid collapsing if a branch mixes plain symbols (likely
-            # iterator parameters) with expressions. Such mixing can later confuse type
-            # inference (e.g., iterator + field value). If we detect heterogeneity, keep the
-            # original terms untouched.
-
             def _branch_mixes_syms(branch_terms):
                 has_sym = any(isinstance(bt, ir.SymRef) for bt in branch_terms)
                 has_other = any(not isinstance(bt, ir.SymRef) for bt in branch_terms)
@@ -102,34 +77,22 @@ class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
         return None
 
     def _split_if_statement(self, n):
-        # If this is a direct `if_` call we simply return its `then` and `else` branches.
         if isinstance(n, ir.FunCall) and isinstance(n.fun, ir.SymRef) and n.fun.id == "if_":
-            # Structure: if_(cond, then_branch, else_branch)
-            # We assume the IR always provides exactly three arguments here.
             return n.args[1], n.args[2]
 
-        # Handle common unary wrappers (e.g. `deref(x)` or single-argument `shift(x)`).
-        # We only treat wrappers with a *single* argument here to avoid accidentally
-        # mis-handling multi-argument calls. For more complex wrappers, collapsing is
-        # skipped and the original expression is preserved (returning the same node for
-        # both branches).
         if isinstance(n, ir.FunCall) and len(n.args) == 1:
             inner_then, inner_else = self._split_if_statement(n.args[0])
-            # If no `if_` was found inside, keep the original node untouched.
             if inner_then is n.args[0] and inner_else is n.args[0]:
                 return n, n
 
             def _rebuild(arg):
                 new_call = ir.FunCall(fun=n.fun, args=[arg])
-                # Preserve source location metadata if available to aid in
-                # debugging and subsequent passes.
                 if getattr(n, "location", None) is not None:
                     new_call.location = n.location  # type: ignore[attr-defined]
                 return new_call
 
             return _rebuild(inner_then), _rebuild(inner_else)
 
-        # Fallback: not an `if_` and not a recognised wrapper.
         return n, n
 
     def _condition_key(self, c):
