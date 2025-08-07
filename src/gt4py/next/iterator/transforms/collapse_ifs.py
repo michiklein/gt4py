@@ -2,33 +2,64 @@ from collections import defaultdict
 from gt4py.eve import NodeTranslator, PreserveLocationVisitor
 from gt4py.next.iterator import ir
 from gt4py.next.iterator.ir_utils import ir_makers as im
+from typing import Optional
 
 
 class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
+    # Commutative & associative ops that we can safely collapse across
+    _COMMUTATIVE_OPS_MAPPING: dict[str, callable] = {
+        "plus": im.plus,
+        "multiplies": im.multiplies_,
+        "maximum": im.maximum,
+        "minimum": im.minimum,
+    }
+
     def visit_FunCall(self, node: ir.FunCall):
         node = self.generic_visit(node)
-        if not self._is_plus(node) or not any(self._contains_if(a) for a in node.args):
-            return node
-        node = self._collapse_same_conditions(node)
+        
+        # First, handle degenerate if statements (same then/else branches)
+        if self._is_if(node):
+            simplified = self._simplify_degenerate_if(node)
+            if simplified is not None:
+                return simplified
+        
+        # Handle collapsing if statements with same conditions for commutative operations
+        if self._should_collapse(node) and any(self._contains_if(a) for a in node.args):
+            node = self._collapse_same_conditions(node)
 
-        if not self._is_plus(node):
-            return self.generic_visit(node)
+        # If this is a plus operation, also flatten nested plus operations
+        if self._is_plus(node):
+            args: list[ir.Expr] = []
+            for a in node.args:
+                if self._is_plus(a):
+                    args.extend(a.args)
+                else:
+                    args.append(a)
 
-        args: list[ir.Expr] = []
-        for a in node.args:
-            if self._is_plus(a):
-                args.extend(a.args)
-            else:
-                args.append(a)
+            new_node = args[0] if len(args) == 1 else self._make_plus_chain(args)
+            return new_node
 
-        new_node = args[0] if len(args) == 1 else self._make_plus_chain(args)
-        return new_node
+        return node
+
+    def _simplify_degenerate_if(self, node: ir.FunCall) -> Optional[ir.Expr]:
+        """Simplify if statements where then and else branches are identical."""
+        if self._is_if(node) and node.args[1] == node.args[2]:
+            return node.args[1]
+        return None
 
     def _make_plus_chain(self, items):
         items = [i for i in items if i is not None]
         res = items[0]
         for itm in items[1:]:
             res = im.plus(res, itm)
+        return res
+
+    def _make_operation_chain(self, items, operation):
+        """Make a chain of operations with the given operation function."""
+        items = [i for i in items if i is not None]
+        res = items[0]
+        for itm in items[1:]:
+            res = operation(res, itm)
         return res
 
     def _collapse_same_conditions(self, node):
@@ -58,10 +89,28 @@ class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
             if _branch_mixes_syms(then_terms) or _branch_mixes_syms(else_terms):
                 new_terms.extend(t for _, t in g)
                 continue
-            t_comb = self._make_plus_chain(then_terms) if len(then_terms) > 1 else then_terms[0]
-            e_comb = self._make_plus_chain(else_terms) if len(else_terms) > 1 else else_terms[0]
+            
+            op_id = node.fun.id if isinstance(node.fun, ir.SymRef) else None
+            builder = self._COMMUTATIVE_OPS_MAPPING.get(op_id)
+            if builder is not None:
+                t_comb = self._make_operation_chain(then_terms, builder) if len(then_terms) > 1 else then_terms[0]
+                e_comb = self._make_operation_chain(else_terms, builder) if len(else_terms) > 1 else else_terms[0]
+            else:
+                # Fallback: cannot collapse
+                new_terms.extend(t for _, t in g)
+                continue
+            
             new_terms.append(im.if_(g[0][0], t_comb, e_comb))
-        return new_terms[0] if len(new_terms) == 1 else self._make_plus_chain(new_terms)
+        
+        if len(new_terms) == 1:
+            return new_terms[0]
+        op_id = node.fun.id if isinstance(node.fun, ir.SymRef) else None
+        builder = self._COMMUTATIVE_OPS_MAPPING.get(op_id)
+        if builder is not None:
+            return self._make_operation_chain(new_terms, builder)
+        else:
+            # Cannot safely combine – return original node with possibly simplified sub-terms
+            return node
 
     def _contains_if(self, n):
         return isinstance(n, ir.FunCall) and (
@@ -106,3 +155,12 @@ class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
 
     def _is_plus(self, n):
         return isinstance(n, ir.FunCall) and isinstance(n.fun, ir.SymRef) and n.fun.id == "plus"
+
+    def _is_if(self, n):
+        return isinstance(n, ir.FunCall) and isinstance(n.fun, ir.SymRef) and n.fun.id == "if_"
+
+    def _should_collapse(self, n):
+        return isinstance(n, ir.FunCall) and isinstance(n.fun, ir.SymRef) and n.fun.id in self._COMMUTATIVE_OPS_MAPPING
+
+    def _is_multiplies(self, n):
+        return isinstance(n, ir.FunCall) and isinstance(n.fun, ir.SymRef) and n.fun.id == "multiplies"
