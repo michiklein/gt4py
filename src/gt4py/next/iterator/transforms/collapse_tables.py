@@ -68,6 +68,13 @@ lookup_c_u = {
     "C2E2C[0]C2E2C[0]": "C2E2C2E2C[0]","C2E2C[0]C2E2C[1]": "C2E2C2E2C[1]","C2E2C[0]C2E2C[2]": "C2E2C2E2C[2]",
     "C2E2C[1]C2E2C[0]": "C2E2C2E2C[1]","C2E2C[1]C2E2C[1]": "C2E2C2E2C[0]","C2E2C[1]C2E2C[2]": "C2E2C2E2C[3]",
     "C2E2C[2]C2E2C[0]": "C2E2C2E2C[2]","C2E2C[2]C2E2C[1]": "C2E2C2E2C[3]","C2E2C[2]C2E2C[2]": "C2E2C2E2C[0]",
+    "C2E2CO[0]C2E2CO[0]": "C2E2C2E2C[0]","C2E2CO[0]C2E2CO[1]": "C2E2C2E2C[1]","C2E2CO[0]C2E2CO[2]": "C2E2C2E2C[2]",
+    "C2E2CO[1]C2E2CO[0]": "C2E2C2E2C[1]","C2E2CO[1]C2E2CO[1]": "C2E2C2E2C[0]","C2E2CO[1]C2E2CO[2]": "C2E2C2E2C[3]",
+    "C2E2CO[2]C2E2CO[0]": "C2E2C2E2C[2]","C2E2CO[2]C2E2CO[1]": "C2E2C2E2C[3]","C2E2CO[2]C2E2CO[2]": "C2E2C2E2C[0]",
+    "C2E2CO[0]C2E2CO[3]": "C2E2C2E2C[3]","C2E2CO[3]C2E2CO[0]": "C2E2C2E2C[3]",
+    "C2E2CO[1]C2E2CO[3]": "C2E2C2E2C[2]","C2E2CO[3]C2E2CO[1]": "C2E2C2E2C[2]",
+    "C2E2CO[2]C2E2CO[3]": "C2E2C2E2C[1]","C2E2CO[3]C2E2CO[2]": "C2E2C2E2C[1]",
+    "C2E2CO[3]C2E2CO[3]": "C2E2C2E2C[0]",
 }
 
 lookup_c_d = {
@@ -82,6 +89,13 @@ lookup_c_d = {
     "C2E2C[0]C2E2C[0]": "C2E2C2E2C[0]","C2E2C[0]C2E2C[1]": "C2E2C2E2C[1]","C2E2C[0]C2E2C[2]": "C2E2C2E2C[2]",
     "C2E2C[1]C2E2C[0]": "C2E2C2E2C[1]","C2E2C[1]C2E2C[1]": "C2E2C2E2C[0]","C2E2C[1]C2E2C[2]": "C2E2C2E2C[3]",
     "C2E2C[2]C2E2C[0]": "C2E2C2E2C[2]","C2E2C[2]C2E2C[1]": "C2E2C2E2C[3]","C2E2C[2]C2E2C[2]": "C2E2C2E2C[0]",
+    "C2E2CO[0]C2E2CO[0]": "C2E2C2E2C[0]","C2E2CO[0]C2E2CO[1]": "C2E2C2E2C[1]","C2E2CO[0]C2E2CO[2]": "C2E2C2E2C[2]",
+    "C2E2CO[1]C2E2CO[0]": "C2E2C2E2C[1]","C2E2CO[1]C2E2CO[1]": "C2E2C2E2C[0]","C2E2CO[1]C2E2CO[2]": "C2E2C2E2C[3]",
+    "C2E2CO[2]C2E2CO[0]": "C2E2C2E2C[2]","C2E2CO[2]C2E2CO[1]": "C2E2C2E2C[3]","C2E2CO[2]C2E2CO[2]": "C2E2C2E2C[0]",
+    "C2E2CO[0]C2E2CO[3]": "C2E2C2E2C[3]","C2E2CO[3]C2E2CO[0]": "C2E2C2E2C[3]",
+    "C2E2CO[1]C2E2CO[3]": "C2E2C2E2C[2]","C2E2CO[3]C2E2CO[1]": "C2E2C2E2C[2]",
+    "C2E2CO[2]C2E2CO[3]": "C2E2C2E2C[1]","C2E2CO[3]C2E2CO[2]": "C2E2C2E2C[1]",
+    "C2E2CO[3]C2E2CO[3]": "C2E2C2E2C[0]",
 }
 
 lookup_v = {
@@ -177,11 +191,14 @@ class CollapseTables(PreserveLocationVisitor, NodeTranslator):
                 sa, oa = flat_args[i], flat_args[i+1]
                 if (
                     isinstance(sa, ir.OffsetLiteral)
-                    and isinstance(sa.value, ir.SymbolRef)
                     and isinstance(oa, ir.OffsetLiteral)
                     and isinstance(oa.value, int)
                 ):
-                    parts.append(f"{sa.value}[{oa.value}]")
+                    # Accept both plain string and SymbolRef in OffsetLiteral
+                    name = sa.value.id if isinstance(sa.value, ir.SymRef) else sa.value
+                    if not isinstance(name, str):
+                        return node
+                    parts.append(f"{name}[{oa.value}]")
                 else:
                     return node
             key = "".join(parts)

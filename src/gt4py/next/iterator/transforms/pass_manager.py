@@ -180,14 +180,17 @@ def apply_common_transforms(
         ir, opcount_preserving=False, force_inline_lambda_args=force_inline_lambda_args
     )
         ir = NormalizeShifts().visit(ir)
-        print("before CollapseTables\n", ir)
+        ir = InlineLambdas.apply(
+        ir, opcount_preserving=False, force_inline_lambda_args=force_inline_lambda_args
+    )
+        ir = NormalizeShifts().visit(ir)
+        print("after InlineLambdas and NormalizeShifts\n", ir)
         ir = CollapseTables().visit(ir)
         print("after CollapseTables\n", ir)
         ir = CollapseIfs().visit(ir)
         print("after CollapseIfs\n", ir)
     else:
         print("no collapse tables\n", ir)
-    # ir = CommonSubexpressionElimination.apply(ir, offset_provider_type=offset_provider_type)
     assert isinstance(ir, itir.Program)
     return ir
 
