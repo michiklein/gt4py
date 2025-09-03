@@ -14,37 +14,8 @@ class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
         "minimum": im.minimum,
     }
 
-    # Wrapper calls that merely forward their first argument (no side-effects)
-    # and therefore can be skipped when looking for nested ``if_`` nodes.
-    _SAFE_WRAPPERS: set[str] = {"cast_", "deref"}
-
-    def _unwrap(self, n: ir.Expr) -> ir.Expr:
-        """Peel off benign wrapper calls so that helper routines can
-        recognise an underlying ``if_``.
-
-        A wrapper is considered *benign* when it:
-        1. Is a plain ``ir.FunCall`` whose ``fun`` is an ``ir.SymRef``;
-        2. Its ``id`` is listed in ``_SAFE_WRAPPERS``;
-        3. The value being wrapped is the **first** positional argument.
-        The loop stops on the first non-wrapper expression and returns it.
-        """
-        while (
-            isinstance(n, ir.FunCall)
-            and isinstance(n.fun, ir.SymRef)
-            and n.fun.id in self._SAFE_WRAPPERS
-            and n.args
-        ):
-            n = n.args[0]
-        return n
-
     def visit_FunCall(self, node: ir.FunCall):
         node = self.generic_visit(node)
-        
-        # First, handle degenerate if statements (same then/else branches)
-        if self._is_if(node):
-            simplified = self._simplify_degenerate_if(node)
-            if simplified is not None:
-                return simplified
         
         # Handle collapsing if statements with same conditions for commutative operations
         if self._should_collapse(node) and any(self._contains_if(a) for a in node.args):
@@ -54,14 +25,18 @@ class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
         if self._is_plus(node):
             args: list[ir.Expr] = []
             for a in node.args:
-                if self._is_plus(a):
+                # Only flatten a nested plus if doing so does *not* cross a guard.
+                if self._is_plus(a) and not self._contains_if(a):
                     args.extend(a.args)
                 else:
                     args.append(a)
 
             new_node = args[0] if len(args) == 1 else self._make_plus_chain(args)
-            return new_node
+            node = self.generic_visit(new_node)
 
+        # Do not remove degenerate guards here; a dedicated post-pass handles that.
+
+        # Return the processed node as-is (no additional traversal)
         return node
 
     def _simplify_degenerate_if(self, node: ir.FunCall) -> Optional[ir.Expr]:
@@ -104,20 +79,15 @@ class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
                 then_terms.append(tp)
                 else_terms.append(ep)
 
-            def _branch_mixes_syms(branch_terms):
-                has_sym = any(isinstance(bt, ir.SymRef) for bt in branch_terms)
-                has_other = any(not isinstance(bt, ir.SymRef) for bt in branch_terms)
-                return has_sym and has_other
-
-            if _branch_mixes_syms(then_terms) or _branch_mixes_syms(else_terms):
-                new_terms.extend(t for _, t in g)
-                continue
-            
             op_id = node.fun.id if isinstance(node.fun, ir.SymRef) else None
             builder = self._COMMUTATIVE_OPS_MAPPING.get(op_id)
             if builder is not None:
-                t_comb = self._make_operation_chain(then_terms, builder) if len(then_terms) > 1 else then_terms[0]
-                e_comb = self._make_operation_chain(else_terms, builder) if len(else_terms) > 1 else else_terms[0]
+                t_comb_raw = self._make_operation_chain(then_terms, builder) if len(then_terms) > 1 else then_terms[0]
+                e_comb_raw = self._make_operation_chain(else_terms, builder) if len(else_terms) > 1 else else_terms[0]
+
+                # Recursively process the combined branches so further collapses inside them happen
+                t_comb = self.visit(t_comb_raw)
+                e_comb = self.visit(e_comb_raw)
             else:
                 # Fallback: cannot collapse
                 new_terms.extend(t for _, t in g)
@@ -141,47 +111,31 @@ class CollapseIfs(PreserveLocationVisitor, NodeTranslator):
         )
 
     def _extract_condition(self, n):
-        n_un = self._unwrap(n)
-        if isinstance(n_un, ir.FunCall):
-            if isinstance(n_un.fun, ir.SymRef) and n_un.fun.id == "if_":
-                return n_un.args[0]
-            if len(n_un.args) == 1:
-                return self._extract_condition(n_un.args[0])
+        if isinstance(n, ir.FunCall):
+            if isinstance(n.fun, ir.SymRef) and n.fun.id == "if_":
+                return n.args[0]
+            if len(n.args) == 1:
+                return self._extract_condition(n.args[0])
         return None
 
     def _split_if_statement(self, n):
-        """Return the *then* and *else* parts of an ``if_`` expression wrapped in
-        arbitrary safe wrappers.  If *n* is not (or does not contain) an
-        ``if_`` the pair *(n, n)* is returned so that callers can detect the
-        fallback easily.
-        """
-        n_un = self._unwrap(n)
+        if isinstance(n, ir.FunCall) and isinstance(n.fun, ir.SymRef) and n.fun.id == "if_":
+            return n.args[1], n.args[2]
 
-        # Base case – actual if_ node
-        if (
-            isinstance(n_un, ir.FunCall)
-            and isinstance(n_un.fun, ir.SymRef)
-            and n_un.fun.id == "if_"
-        ):
-            return n_un.args[1], n_un.args[2]
-
-        # If still a FunCall, try recurring through its first argument when it
-        # looks like a unary decorator (not in _SAFE_WRAPPERS)
-        if isinstance(n_un, ir.FunCall) and len(n_un.args) == 1:
-            inner_then, inner_else = self._split_if_statement(n_un.args[0])
-            if inner_then is n_un.args[0] and inner_else is n_un.args[0]:
-                return n_un, n_un
+        if isinstance(n, ir.FunCall) and len(n.args) == 1:
+            inner_then, inner_else = self._split_if_statement(n.args[0])
+            if inner_then is n.args[0] and inner_else is n.args[0]:
+                return n, n
 
             def _rebuild(arg):
-                new_call = ir.FunCall(fun=n_un.fun, args=[arg] + n_un.args[1:])
-                if getattr(n_un, "location", None) is not None:
-                    new_call.location = n_un.location  # type: ignore[attr-defined]
+                new_call = ir.FunCall(fun=n.fun, args=[arg])
+                if getattr(n, "location", None) is not None:
+                    new_call.location = n.location  # type: ignore[attr-defined]
                 return new_call
 
             return _rebuild(inner_then), _rebuild(inner_else)
 
-        # Anything else – give up
-        return n_un, n_un
+        return n, n
 
     def _condition_key(self, c):
         if isinstance(c, ir.SymRef):

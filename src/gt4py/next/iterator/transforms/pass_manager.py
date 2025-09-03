@@ -36,6 +36,8 @@ from gt4py.next.iterator.transforms.unroll_reduce import UnrollReduce
 from gt4py.next.iterator.type_system.inference import infer
 from gt4py.next.iterator.transforms.collapse_tables import CollapseTables
 from gt4py.next.iterator.transforms.collapse_ifs import CollapseIfs
+# Post-pass that removes degenerate ifs
+from gt4py.next.iterator.transforms.strip_degenerate_ifs import StripDegenerateIfs
 import pdb
 import os
 
@@ -188,7 +190,8 @@ def apply_common_transforms(
         ir = CollapseTables().visit(ir)
         print("after CollapseTables\n", ir)
         ir = CollapseIfs().visit(ir)
-        print("after CollapseIfs\n", ir)
+        ir = StripDegenerateIfs().visit(ir)
+        print("after CollapseIfs + StripDegenerateIfs\n", ir)
     else:
         print("no collapse tables\n", ir)
     assert isinstance(ir, itir.Program)
